@@ -136,15 +136,23 @@ def _asset(
 ) -> str:
     """Find a release asset, preferring the exact release version."""
 
-    fallback = ''
     for item in assets or []:
         name = str(item.get('name', ''))
         if name.startswith(prefix) and name.endswith(suffix):
             url = item.get('browser_download_url', '')
             if version and name == f'{prefix}{version}{suffix}':
                 return url
-            fallback = fallback or url
-    return fallback
+            if not version:
+                return url
+    return ''
+
+
+def _asset_digest(assets: list, prefix: str, suffix: str, version: str) -> str:
+    expected = f'{prefix}{version}{suffix}'.lower()
+    for item in assets or []:
+        if str(item.get('name', '')).lower() == expected:
+            return str(item.get('digest') or '').lower().removeprefix('sha256:')
+    return ''
 
 
 def check(current_version: str, force: bool = False) -> dict[str, Any]:
@@ -173,6 +181,7 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         # archive to take the changed ones out of.
         'package_manifest_url': '',
         'package_url': '',
+        'verified': False,
         'managed': layout.managed(),
     }
     try:
@@ -185,15 +194,18 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 if str(a.get('name', '')).lower() == f'dannify-setup-{tag}.exe'.lower()
             ),
             None,
-        ) or next(
-            (
-                a for a in assets
-                if str(a.get('name', '')).lower().endswith('.exe')
-                and 'setup' in str(a.get('name', '')).lower()
-            ),
-            None,
         )
         available = bool(tag) and is_newer(tag, current_version)
+        installer_digest = str((installer or {}).get('digest') or '').lower().removeprefix('sha256:')
+        manifest_digest = _asset_digest(assets, 'package-', '.json', tag)
+        # GitHub's immutable asset digest is the only release integrity
+        # signal available to this channel. Never offer an unverified asset.
+        verified = bool(
+            installer_digest if not layout.managed() else manifest_digest
+        )
+        if not verified and available:
+            result['error'] = 'release assets have no verified digest'
+            available = False
         # A version that could not start on this PC was rolled back by the
         # launcher; offering it again would only go round in circles.
         if available and tag == layout.skipped_version():
@@ -206,9 +218,12 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 'url': data.get('html_url') or '',
                 'download_url': (installer or {}).get('browser_download_url', ''),
                 'size': int((installer or {}).get('size') or 0),
+                'sha256': installer_digest,
                 'published_at': data.get('published_at') or '',
                 'package_manifest_url': _asset(assets, 'package-', '.json', tag),
                 'package_url': _asset(assets, 'package-', '.zip', tag),
+                'package_manifest_sha256': manifest_digest,
+                'verified': verified,
             }
         )
     except Exception as exc:  # offline, rate-limited, no releases yet…
@@ -265,6 +280,7 @@ def download(
     url: str,
     dest_dir: Path,
     progress_cb: Optional[Callable[..., None]] = None,
+    expected_sha256: str = '',
 ) -> Path:
     """Download the installer (for a copy that cannot update in place)."""
 
@@ -294,6 +310,9 @@ def download(
     if total and done != total:
         partial.unlink(missing_ok=True)
         raise RuntimeError(f'download stopped early ({done} of {total} bytes)')
+    if expected_sha256 and _sha256(partial) != expected_sha256.lower().removeprefix('sha256:'):
+        partial.unlink(missing_ok=True)
+        raise RuntimeError('download hash does not match the release asset')
     partial.replace(target)
     bar.done()
     logger.info('Update downloaded to {}', target)
@@ -343,11 +362,22 @@ def stage(info: dict[str, Any], progress: Optional[Callable[..., None]] = None) 
     with _stage_lock:
         bar = Progress(progress)
         bar.stage('reading', 0.0, 0.03)
-        manifest = json.loads(_get_text(manifest_url))
+        manifest_text = _get_text(manifest_url)
+        expected_manifest = str(info.get('package_manifest_sha256') or '').lower().removeprefix('sha256:')
+        if not expected_manifest:
+            raise RuntimeError('the release manifest has no verified digest')
+        if expected_manifest:
+            actual_manifest = hashlib.sha256(manifest_text.encode('utf-8')).hexdigest()
+            if actual_manifest != expected_manifest:
+                raise RuntimeError('the release manifest hash does not match')
+        manifest = json.loads(manifest_text)
         files: dict[str, Any] = manifest.get('files') or {}
         version = str(manifest.get('version') or info.get('version') or '')
         if not files or not version:
             raise RuntimeError('the release package list is empty')
+        expected_version = str(info.get('version') or '').strip().lstrip('vV')
+        if expected_version and version.lstrip('vV') != expected_version:
+            raise RuntimeError('the release package version does not match the release')
 
         tmp = base / f'app-next.tmp-{os.urandom(4).hex()}'
         for rel in files:

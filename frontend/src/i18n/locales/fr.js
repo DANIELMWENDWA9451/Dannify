@@ -604,6 +604,7 @@ export default {
     installTitle: 'Mettre à jour vers Dannify {version} ?',
     installMessage: 'Dannify se ferme un instant. Votre bibliothèque, vos réglages et votre connexion sont conservés.',
     installFailed: 'Impossible de lancer la mise à jour.',
+    quitBlocked: 'La mise à jour est encore en téléchargement. Laissez Dannify ouvert ; elle reprendra si elle est interrompue.',
     releaseNotes: 'Notes de version',
     skip: 'Ignorer cette version',
     mb: 'Mo',

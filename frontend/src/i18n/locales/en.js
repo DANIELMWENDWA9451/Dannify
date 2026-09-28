@@ -599,6 +599,7 @@ export default {
     installTitle: 'Update to Dannify {version}?',
     installMessage: 'Dannify closes for a moment. Your library, settings and sign-in are kept.',
     installFailed: 'Could not start the update.',
+    quitBlocked: 'The update is still downloading. Keep Dannify open; it will resume if interrupted.',
     releaseNotes: 'Release notes',
     skip: 'Skip this version',
     mb: 'MB',

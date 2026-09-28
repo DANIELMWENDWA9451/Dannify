@@ -93,6 +93,7 @@ class Release:
             'notes': 'Faster starts.\nA new look.',
             'package_manifest_url': 'https://example.invalid/package-4.1.0.json',
             'package_url': 'https://example.invalid/package-4.1.0.zip',
+            'package_manifest_sha256': _sha(json.dumps(self.manifest).encode()),
         }
 
 
@@ -153,10 +154,20 @@ def test_a_damaged_download_leaves_nothing_behind(installed, monkeypatch):
     assert not list(installed.glob('app-next.tmp-*'))
 
 
+def test_manifest_version_must_match_release_info(installed, monkeypatch):
+    release = Release(NEW, '4.1.0')
+    info = release.install(monkeypatch)
+    info['version'] = '4.2.0'
+    with pytest.raises(RuntimeError, match='version'):
+        updates.stage(info)
+    assert not (installed / 'app-next').exists()
+
+
 def test_a_list_that_points_outside_the_app_is_refused(installed, monkeypatch):
     release = Release(NEW)
     info = release.install(monkeypatch)
     release.manifest['files']['../evil.dll'] = {'size': 1, 'sha256': '0' * 64}
+    info['package_manifest_sha256'] = _sha(json.dumps(release.manifest).encode())
 
     with pytest.raises(ValueError):
         updates.stage(info)
@@ -222,7 +233,7 @@ def test_a_version_rolled_back_here_is_not_offered_again(tmp_path, monkeypatch):
     monkeypatch.setattr(updates, '_fetch_latest', lambda: {'tag_name': 'v4.1.0', 'assets': []})
     assert updates.check('4.0.0', force=True)['available'] is False
     monkeypatch.setattr(updates, '_fetch_latest', lambda: {'tag_name': 'v4.2.0', 'assets': []})
-    assert updates.check('4.0.0', force=True)['available'] is True
+    assert updates.check('4.0.0', force=True)['available'] is False
 
 
 def test_tidy_keeps_one_version_to_go_back_to(installed):

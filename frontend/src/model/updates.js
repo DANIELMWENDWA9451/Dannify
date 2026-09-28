@@ -59,6 +59,12 @@ const skipped = ref(read(SKIP_KEY, ''))
 // for themselves. On by default: the whole point is that it is not a decision.
 const autoUpdate = ref(read(AUTO_KEY, '1') !== '0')
 
+if (typeof window !== 'undefined') {
+  window.__dannifyUpdateQuitWarning = () => {
+    toast(t('update.quitBlocked'), { tone: 'warning', timeout: 7000 })
+  }
+}
+
 function setAutoUpdate(on) {
   autoUpdate.value = !!on
   write(AUTO_KEY, autoUpdate.value ? '1' : '0')
@@ -130,6 +136,7 @@ async function download({ quiet = false } = {}) {
     return false
   }
   downloading.value = true
+  desktop.setUpdateActivity(true, 'downloading')
   progress.value = 0
   stageCode.value = 'starting'
   try {
@@ -154,6 +161,7 @@ async function download({ quiet = false } = {}) {
     return false
   } finally {
     downloading.value = false
+    desktop.setUpdateActivity(false)
   }
 }
 

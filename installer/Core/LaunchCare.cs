@@ -41,7 +41,7 @@ namespace Dannify.Setup.Core
             for (int attempt = 0; attempt < attempts; attempt++)
             {
                 app = TryStart(env, passThrough);
-                outcome = Watch(app, afterUpdate ? 15000 : 8000, out int code);
+                outcome = Watch(app, env, afterUpdate ? 15000 : 8000, out int code);
                 if (outcome != Outcome.Failed) break;
                 Log.Warn("start attempt " + (attempt + 1) + " ended with " + code);
                 Thread.Sleep(attempt == 0 ? 2000 : 3000);
@@ -52,7 +52,7 @@ namespace Dannify.Setup.Core
                 for (int attempt = 0; attempt < 3; attempt++)
                 {
                     app = TryStart(env, passThrough);
-                    outcome = Watch(app, 15000, out _);
+                    outcome = Watch(app, env, 15000, out _);
                     if (outcome != Outcome.Failed) break;
                     Thread.Sleep(2500);
                 }
@@ -88,7 +88,7 @@ namespace Dannify.Setup.Core
             }
         }
 
-        private static Outcome Watch(Process app, int timeoutMs, out int exitCode)
+        private static Outcome Watch(Process app, Env env, int timeoutMs, out int exitCode)
         {
             exitCode = 0;
             if (app == null) return Outcome.Failed;
@@ -101,9 +101,13 @@ namespace Dannify.Setup.Core
                     // 0 is the single-instance path: another copy took the request.
                     return exitCode == 0 ? Outcome.HandedOff : Outcome.Failed;
                 }
-                if (Launcher.WindowOf(app.Id) != IntPtr.Zero) return Outcome.Up;
+                if (Launcher.Readiness(env, app.Id)) return Outcome.Up;
             }
-            return Outcome.Up; // still running: slow to show, but alive
+            // A process that never completes the application handshake is not
+            // healthy. Leaving it behind makes the next attempt look like a
+            // successful single-instance launch.
+            Apps.Kill(new[] { app.Id });
+            return Outcome.Failed;
         }
 
         /// <summary>Put the version from before the update back in place.</summary>
