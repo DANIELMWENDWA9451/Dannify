@@ -131,7 +131,11 @@ API.ws_onmessage((event) => {
     } catch {
       // ignore
     }
-    window.dispatchEvent(new CustomEvent('dannify:library-changed'))
+    window.dispatchEvent(
+      new CustomEvent('dannify:library-changed', {
+        detail: { reason: 'download', song: data.song, filename: data.filename || '' },
+      })
+    )
     if (!data.song) return
   }
   let item = progressTracker.getBySong(data.song)

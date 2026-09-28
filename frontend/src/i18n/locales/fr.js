@@ -516,6 +516,12 @@ export default {
     albumCount: '{count} album | {count} albums',
     singles: 'Singles',
     shuffle: 'Aléatoire',
+    loadOnline: 'Charger le catalogue en ligne',
+    loadingOnline: 'Chargement du catalogue en ligne…',
+    onlineLoaded: 'Catalogue en ligne chargé',
+    onlineCatalog: 'Plus de cet artiste',
+    onlineFailed: 'Impossible de charger le catalogue en ligne.',
+    onlineEmpty: 'Aucun autre titre en ligne trouvé.',
   },
   account: {
     title: 'Compte',

@@ -511,6 +511,12 @@ export default {
     albumCount: '{count} album | {count} albums',
     singles: 'Singles',
     shuffle: 'Shuffle',
+    loadOnline: 'Load online catalog',
+    loadingOnline: 'Loading online catalog…',
+    onlineLoaded: 'Online catalog loaded',
+    onlineCatalog: 'More from this artist',
+    onlineFailed: 'Could not load the online catalog.',
+    onlineEmpty: 'No additional online songs found.',
   },
   account: {
     title: 'Account',

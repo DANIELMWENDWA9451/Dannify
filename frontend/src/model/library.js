@@ -16,8 +16,12 @@ const error = ref(false)
 export const libraryEpoch = ref(0)
 
 let inflight = null
+let refreshAfterInflight = false
 async function refresh() {
-  if (inflight) return inflight
+  if (inflight) {
+    refreshAfterInflight = true
+    return inflight
+  }
   loading.value = true
   inflight = Promise.all([API.getLibrary(), API.getArtists()])
     .then(([lib, art]) => {
@@ -37,6 +41,10 @@ async function refresh() {
     .finally(() => {
       loading.value = false
       inflight = null
+      if (refreshAfterInflight) {
+        refreshAfterInflight = false
+        refresh()
+      }
     })
   return inflight
 }
@@ -59,7 +67,10 @@ window.addEventListener('dannify:library-changed', (e) => {
     const gone = new Set(removed)
     tracks.value = tracks.value.filter((tr) => !gone.has(tr.file))
   }
-  scheduleRefresh(removed ? 400 : 1200)
+  // A completed download is already fully tagged before this event arrives.
+  // Refresh immediately so artist counts, artwork, and the sidebar do not
+  // lag behind the download queue.
+  scheduleRefresh(removed ? 400 : e.detail && e.detail.reason === 'download' ? 0 : 1200)
 })
 
 // Coming back to the window is the moment the list is most likely to be

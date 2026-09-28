@@ -131,14 +131,20 @@ def _fetch_latest() -> dict[str, Any]:
     return _get(f'{base}/latest')
 
 
-def _asset(assets: list, prefix: str, suffix: str) -> str:
-    """Find a release asset by name shape."""
+def _asset(
+    assets: list, prefix: str, suffix: str, version: str = ''
+) -> str:
+    """Find a release asset, preferring the exact release version."""
 
+    fallback = ''
     for item in assets or []:
         name = str(item.get('name', ''))
         if name.startswith(prefix) and name.endswith(suffix):
-            return item.get('browser_download_url', '')
-    return ''
+            url = item.get('browser_download_url', '')
+            if version and name == f'{prefix}{version}{suffix}':
+                return url
+            fallback = fallback or url
+    return fallback
 
 
 def check(current_version: str, force: bool = False) -> dict[str, Any]:
@@ -175,8 +181,13 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
         assets = data.get('assets') or []
         installer = next(
             (
-                a
-                for a in assets
+                a for a in assets
+                if str(a.get('name', '')).lower() == f'dannify-setup-{tag}.exe'.lower()
+            ),
+            None,
+        ) or next(
+            (
+                a for a in assets
                 if str(a.get('name', '')).lower().endswith('.exe')
                 and 'setup' in str(a.get('name', '')).lower()
             ),
@@ -196,8 +207,8 @@ def check(current_version: str, force: bool = False) -> dict[str, Any]:
                 'download_url': (installer or {}).get('browser_download_url', ''),
                 'size': int((installer or {}).get('size') or 0),
                 'published_at': data.get('published_at') or '',
-                'package_manifest_url': _asset(assets, 'package-', '.json'),
-                'package_url': _asset(assets, 'package-', '.zip'),
+                'package_manifest_url': _asset(assets, 'package-', '.json', tag),
+                'package_url': _asset(assets, 'package-', '.zip', tag),
             }
         )
     except Exception as exc:  # offline, rate-limited, no releases yet…
