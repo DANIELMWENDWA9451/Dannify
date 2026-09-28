@@ -408,7 +408,6 @@
             type="checkbox"
             class="switch"
             :checked="updates.autoUpdate.value"
-            :disabled="updates.downloading.value"
             @change="updates.setAutoUpdate($event.target.checked)"
           />
         </label>
@@ -433,11 +432,7 @@
                   ? t('update.installNow')
                   : t('update.downloadAndInstall') }}
             </button>
-            <button
-              class="btn"
-              :disabled="updates.checking.value || updates.downloading.value"
-              @click="updates.check(true, { quiet: false })"
-            >
+            <button class="btn" :disabled="updates.checking.value" @click="updates.check(true, { quiet: false })">
               <span v-if="updates.checking.value" class="spinner h-4 w-4" />
               {{ t('update.checkNow') }}
             </button>

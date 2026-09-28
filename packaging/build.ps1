@@ -111,20 +111,19 @@ if (Test-Path $runtime) {
     }
 }
 
+# ytmusicapi loads its gettext catalogue at runtime when validating a Google
+# session. PyInstaller does not collect these .mo files automatically.
+$ytmusicLocales = Join-Path $backend 'venv\Lib\site-packages\ytmusicapi\locales'
+$bundledLocales = Join-Path $app '_internal\ytmusicapi\locales'
+if (-not (Test-Path $ytmusicLocales)) { throw "ytmusicapi locales missing: $ytmusicLocales" }
+New-Item -ItemType Directory -Force $bundledLocales | Out-Null
+Copy-Item (Join-Path $ytmusicLocales '*') $bundledLocales -Recurse -Force
+
 # Ship-time settings (update repository, support link) travel inside the app
 # now, so an update can change them too. See packaging\config\README.md.
 $config = Join-Path $app 'config'
 New-Item -ItemType Directory -Force $config | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'config\*.json') $config -Force
-
-Step 'Packed resources'
-$resourcePack = Join-Path $app '_internal\dannify.res'
-& $python (Join-Path $PSScriptRoot 'make_resources.py') `
-    (Join-Path $frontend 'dist') `
-    (Join-Path $backend 'dannify\clients.json') `
-    $resourcePack
-if ($LASTEXITCODE -ne 0) { throw "resource pack failed ($LASTEXITCODE)" }
-if (-not (Test-Path $resourcePack)) { throw "resource pack missing: $resourcePack" }
 
 Step 'Installer program'
 & $dotnet build $csproj -c Release -nologo -v q
@@ -132,8 +131,6 @@ if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
 $engine = Join-Path $installer 'bin\Release\DannifySetup.exe'
 if (-not (Test-Path $engine)) { throw "installer program missing: $engine" }
 # The launcher travels inside the app, so an update can bring a new one.
-# PyInstaller 6 places bundled data below _internal while the launcher is
-# intentionally kept beside that directory for the install layout.
 New-Item -ItemType Directory -Force $runtime | Out-Null
 Copy-Item $engine (Join-Path $runtime 'launcher.exe') -Force
 Write-Host ("App folder: " + (Size $app))

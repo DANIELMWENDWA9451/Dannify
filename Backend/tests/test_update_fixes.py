@@ -8,7 +8,6 @@ and taskbar buttons that never appeared because a class was defined twice.
 from __future__ import annotations
 
 import ast
-import hashlib
 import time
 from pathlib import Path
 
@@ -69,73 +68,6 @@ def test_pruning_keeps_everything_when_the_running_version_is_unknown(tmp_path):
     (tmp_path / 'Dannify-Setup-3.17.0.exe').write_bytes(b'x')
     assert updates.prune_downloads(tmp_path, '') == []
     assert (tmp_path / 'Dannify-Setup-3.17.0.exe').exists()
-
-
-def test_update_check_prefers_assets_for_the_release_version(monkeypatch):
-    monkeypatch.setattr(updates, '_fetch_latest', lambda: {
-        'tag_name': 'v4.1.0',
-        'assets': [
-            {'name': 'Dannify-Setup-4.0.0.exe', 'browser_download_url': 'old-setup'},
-            {'name': 'Dannify-Setup-4.1.0.exe', 'browser_download_url': 'new-setup', 'digest': 'sha256:' + '1' * 64},
-            {'name': 'package-4.0.0.json', 'browser_download_url': 'old-manifest'},
-            {'name': 'package-4.1.0.json', 'browser_download_url': 'new-manifest', 'digest': 'sha256:' + '2' * 64},
-            {'name': 'package-4.0.0.zip', 'browser_download_url': 'old-package'},
-            {'name': 'package-4.1.0.zip', 'browser_download_url': 'new-package'},
-        ],
-    })
-
-    result = updates.check('4.0.0', force=True)
-
-    assert result['download_url'] == 'new-setup'
-    assert result['package_manifest_url'] == 'new-manifest'
-    assert result['package_url'] == 'new-package'
-
-
-def test_update_check_does_not_fallback_to_another_release_asset(monkeypatch):
-    monkeypatch.setattr(updates, '_fetch_latest', lambda: {
-        'tag_name': 'v4.1.0',
-        'assets': [
-            {'name': 'Dannify-Setup-4.0.0.exe', 'browser_download_url': 'old-setup'},
-            {'name': 'package-4.0.0.json', 'browser_download_url': 'old-manifest'},
-        ],
-    })
-    result = updates.check('4.0.0', force=True)
-    assert result['download_url'] == ''
-    assert result['package_manifest_url'] == ''
-
-
-def test_update_check_rejects_assets_without_github_digest(monkeypatch):
-    monkeypatch.setattr(updates, '_fetch_latest', lambda: {
-        'tag_name': 'v4.1.0',
-        'assets': [
-            {'name': 'Dannify-Setup-4.1.0.exe', 'browser_download_url': 'setup'},
-        ],
-    })
-    result = updates.check('4.0.0', force=True)
-    assert result['available'] is False
-    assert 'verified digest' in result['error']
-
-
-def test_download_rejects_a_release_hash_mismatch(tmp_path, monkeypatch):
-    class Response:
-        headers = {'Content-Length': '3'}
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def read(self, size):
-            if hasattr(self, 'done'):
-                return b''
-            self.done = True
-            return b'bad'
-
-    monkeypatch.setattr(updates.urllib.request, 'urlopen', lambda *a, **k: Response())
-    with pytest.raises(RuntimeError, match='hash'):
-        updates.download('https://example.invalid/Dannify-Setup-4.1.0.exe', tmp_path, expected_sha256='0' * 64)
-    assert not list(tmp_path.iterdir())
 
 
 # ---------------------------------------------------------------------------

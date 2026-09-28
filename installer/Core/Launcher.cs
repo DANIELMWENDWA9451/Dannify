@@ -28,21 +28,6 @@ namespace Dannify.Setup.Core
         public static bool AppRunning(Env env) =>
             Apps.MutexExists(env.MutexName) || Apps.ProcessesUnder(env.AppDir).Count > 0;
 
-        public static bool Readiness(Env env, int pid)
-        {
-            try
-            {
-                string file = Path.Combine(env.DataDir, "instance.json");
-                if (!File.Exists(file)) return false;
-                var data = Json.ParseObject(File.ReadAllText(file));
-                return Json.Int(data, "pid") == pid && Json.Bool(data, "ready");
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         /// <summary>
         /// Swap in a waiting update. False (and nothing changed) if there is
         /// none, if the app is running, or if Windows will not let go of the
@@ -52,6 +37,7 @@ namespace Dannify.Setup.Core
         public static bool TryApplyPending(Env env, int patienceMs)
         {
             if (!HasPending(env)) return false;
+            if (AppRunning(env)) return false;
 
             using (var gate = new Mutex(false, @"Local\DannifySwap" + env.Instance))
             {

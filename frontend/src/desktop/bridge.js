@@ -151,8 +151,6 @@ const installUpdate = (path) => call('app_install_update', String(path || ''))
 // its updates ready beside itself and the launcher swaps them in.
 const stageUpdate = (path) => call('app_stage_update', String(path || ''))
 const clearStagedUpdate = () => call('app_clear_staged_update')
-const setUpdateActivity = (active, stage = '') =>
-  call('app_update_activity', !!active, String(stage || ''))
 
 // --- YouTube Music account --------------------------------------------------
 // The sign-in itself happens in a real Google window opened by the shell;
@@ -319,7 +317,6 @@ export const desktop = {
   installUpdate,
   stageUpdate,
   clearStagedUpdate,
-  setUpdateActivity,
   accountSignIn,
   accountClearSession,
   revealInFolder,

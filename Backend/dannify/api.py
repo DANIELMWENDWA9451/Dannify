@@ -2114,14 +2114,12 @@ async def update_download_endpoint(
             raise HTTPException(status_code=502, detail='update_failed') from exc
         return {'path': str(staged), 'version': info.get('version', ''), 'kind': 'staged'}
 
-    url = str(info.get('download_url') or '')
+    url = str(payload.get('url') or info.get('download_url') or '')
     if not url:
         raise HTTPException(status_code=404, detail='no_download')
     dest = Path(state.data_dir or Path.home()) / 'updates'
     try:
-        path = await asyncio.to_thread(
-            updates.download, url, dest, _progress, str(info.get('sha256') or '')
-        )
+        path = await asyncio.to_thread(updates.download, url, dest, _progress)
     except Exception as exc:
         logger.opt(exception=True).info('update download failed')
         raise HTTPException(status_code=502, detail='update_failed') from exc

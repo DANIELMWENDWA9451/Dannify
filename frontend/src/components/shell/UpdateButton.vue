@@ -5,7 +5,6 @@
   <button
     v-if="updates.available.value && updates.ready.value"
     class="upd-ready press"
-    :disabled="updates.downloading.value"
     :title="t('update.available', { version: updates.info.value.version })"
     @click="updates.downloadAndInstall()"
     @contextmenu.prevent="onClick"
@@ -18,7 +17,6 @@
     v-else-if="updates.available.value"
     class="upd"
     :class="{ 'is-busy': updates.downloading.value }"
-    :disabled="updates.downloading.value"
     :title="t('update.available', { version: updates.info.value.version })"
     @click="onClick"
   >

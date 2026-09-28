@@ -77,7 +77,6 @@ os.environ.setdefault('DANNIFY_LOG_FILE', str(_DATA_DIR / 'dannify.log'))
 # No fixed port: a well-known one is a signature anybody can look for, and
 # the window finds its own server through instance.json anyway.
 PREFERRED_PORT = 0
-PORT_ATTEMPTS = 5
 # Loopback only unless the user deliberately shares. Binding 0.0.0.0 put the
 # whole API and library on the LAN for anyone who guessed the port.
 LAN_ENABLED = os.environ.get('DANNIFY_LAN', '').strip().lower() in ('1', 'true', 'yes')
@@ -1171,8 +1170,6 @@ class DesktopApi:
         # Once the window starts closing, calling into it (Invoke/evaluate_js)
         # raises from a destroyed handle: stop talking to it.
         self._closing = False
-        self._update_active = False
-        self._update_stage = ''
 
     # --- wiring (called from Python, not JS) -------------------------------
     def _attach(self, window) -> None:  # noqa: ANN001
@@ -1729,29 +1726,16 @@ class DesktopApi:
         self._show_from_tray()
 
     # --- app lifecycle ------------------------------------------------------
-    def _quit(self, forced: bool = False) -> bool:
-        if self._update_active and not forced:
-            try:
-                self._eval("window.__dannifyUpdateQuitWarning && window.__dannifyUpdateQuitWarning()")
-            except Exception:
-                pass
-            return False
+    def _quit(self) -> None:
         self._quitting = True
         if self._hidden:
             # A hidden form ignores WM_SYSCOMMAND/SC_CLOSE; close it directly.
             self._ui(lambda: self._form.Close())
         else:
             self._post(WM_SYSCOMMAND, SC_CLOSE)
-        return True
 
     def app_quit(self) -> None:
         self._quit()
-
-    def app_update_activity(self, active: bool, stage: str = '') -> bool:
-        """Let the native close handler protect an in-flight update."""
-        self._update_active = bool(active)
-        self._update_stage = str(stage or '')
-        return True
 
     def app_restart(self) -> bool:
         """Relaunch Dannify (used by "restart to update").
@@ -2416,7 +2400,7 @@ def _watch_for_quit_request(on_quit) -> None:
             # INFINITE; the thread is a daemon so it dies with the process.
             if kernel32.WaitForSingleObject(handle, 0xFFFFFFFF) == 0:
                 logger.info('Shutdown requested from outside; closing')
-                on_quit(True)
+                on_quit()
         except Exception:
             logger.opt(exception=True).debug('quit watcher failed')
 
@@ -2469,7 +2453,6 @@ def _acquire_single_instance() -> bool:
     if _running_instance_window():
         _focus_existing_window()
         return False
-
     # Another copy holds the mutex but has no window any more: it is on its
     # way out (closed a moment ago). Opening Dannify again straight after
     # closing it used to do nothing at all; wait for it to finish instead.
@@ -2479,32 +2462,6 @@ def _acquire_single_instance() -> bool:
             return True
     _focus_existing_window()
     return False
-
-
-def _enter_swap_gate():
-    """Reserve the install while the launcher is swapping app directories."""
-    if not _WIN:
-        return None
-    try:
-        suffix = os.environ.get('DANNIFY_INSTANCE', '')
-        handle = kernel32.CreateMutexW(None, False, f'Local\\DannifySwap{suffix}')
-        if not handle:
-            return None
-        if kernel32.WaitForSingleObject(handle, 0xFFFFFFFF) != 0:
-            kernel32.CloseHandle(handle)
-            return None
-        return handle
-    except Exception:
-        return None
-
-
-def _leave_swap_gate(handle) -> None:
-    if not handle:
-        return
-    try:
-        kernel32.ReleaseMutex(handle)
-    finally:
-        kernel32.CloseHandle(handle)
 
 
 def _running_instance_window() -> int:
@@ -2644,17 +2601,6 @@ def _pick_port() -> int:
     return port
 
 
-def _pick_retry_port(previous: int) -> int:
-    """Pick a new candidate after a bind race, never reusing the loser."""
-    for _ in range(PORT_ATTEMPTS):
-        candidate = _pick_port()
-        if candidate != previous:
-            return candidate
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((BIND_HOST, 0))
-        return int(s.getsockname()[1])
-
-
 # ---------------------------------------------------------------------------
 # Server thread
 # ---------------------------------------------------------------------------
@@ -2717,23 +2663,6 @@ def _start_server(port: int, token: str):
     return server
 
 
-def _start_server_with_retry(port: int, token: str):
-    """Start the API and recover from the small check-then-bind race."""
-    candidate = port
-    for attempt in range(PORT_ATTEMPTS):
-        server = _start_server(candidate, token)
-        if _wait_until_up(candidate, timeout=4.0, token=token):
-            return server, candidate
-        logger_print('server did not become ready on port', candidate)
-        try:
-            server.should_exit = True
-        except Exception:
-            pass
-        time.sleep(0.1)
-        candidate = _pick_retry_port(candidate)
-    raise RuntimeError('the Dannify server could not bind a local port')
-
-
 def _wait_until_up(port: int, timeout: float = 30.0, token: str = '') -> bool:
     """Poll until the API answers us.
 
@@ -2769,20 +2698,9 @@ def _write_instance_file(port: int, hwnd: int = 0) -> None:
     """
 
     try:
-        payload = {'port': port, 'pid': os.getpid(), 'ready': False}
+        payload = {'port': port, 'pid': os.getpid()}
         if hwnd:
             payload['hwnd'] = int(hwnd)
-        _INSTANCE_FILE.write_text(json.dumps(payload), encoding='utf-8')
-    except Exception:
-        pass
-
-
-def _mark_instance_ready(port: int) -> None:
-    try:
-        payload = json.loads(_INSTANCE_FILE.read_text(encoding='utf-8'))
-        if int(payload.get('pid', 0)) != os.getpid():
-            return
-        payload.update({'port': port, 'pid': os.getpid(), 'ready': True})
         _INSTANCE_FILE.write_text(json.dumps(payload), encoding='utf-8')
     except Exception:
         pass
@@ -3255,23 +3173,18 @@ def main() -> None:
         sys.exit(0)
 
     _claim_app_identity()
-    swap_gate = _enter_swap_gate()
-    if _WIN and swap_gate is None:
-        sys.exit(3)
     opening = _file_argument()
     if not _acquire_single_instance():
-        _leave_swap_gate(swap_gate)
         # Already running, and it has just been brought forward. Explorer
         # started us only to open a file, so leave it where the running copy
         # will find it and get out of the way.
         if opening:
             _hand_file_to_running_instance(opening)
         sys.exit(0)
-    _leave_swap_gate(swap_gate)
 
     port = _pick_port()
     session_key = secrets.token_urlsafe(24)
-    server, port = _start_server_with_retry(port, session_key)
+    server = _start_server(port, session_key)
     _write_instance_file(port)
     threading.Thread(
         target=_after_start_housekeeping, name='dannify-housekeeping', daemon=True,
@@ -3375,29 +3288,6 @@ def main() -> None:
         maximized=maximized,
         shadow=False,  # the native frame already provides the DWM shadow
     )
-    startup_failed = False
-
-    def _terminal_startup_failure() -> None:
-        nonlocal startup_failed
-        if startup_failed:
-            return
-        startup_failed = True
-        api._quitting = True
-        try:
-            server.should_exit = True
-        except Exception:
-            pass
-        try:
-            note = json.loads(_INSTANCE_FILE.read_text(encoding='utf-8'))
-            if int(note.get('pid', 0)) == os.getpid():
-                _INSTANCE_FILE.unlink(missing_ok=True)
-        except Exception:
-            pass
-        try:
-            window.destroy()
-        except Exception:
-            pass
-        threading.Timer(0.75, lambda: os._exit(3)).start()
 
     # pywebview hands the window only to a parameter literally named "window".
     def _before_show(window) -> None:  # noqa: ANN001  (UI thread, before first paint)
@@ -3413,7 +3303,6 @@ def main() -> None:
         # Give the media flyout something to call us other than "Unknown app".
         _schedule_media_identity()
         if _wait_until_up(port, token=session_key):
-            _mark_instance_ready(port)
             # Edge WebView2 sometimes deadlocks on load_url() called from a
             # background thread; navigating via JS sidesteps it. The query
             # flag tells the frontend it runs inside the desktop shell.
@@ -3423,7 +3312,18 @@ def main() -> None:
             except Exception:
                 window.load_url(target)
         else:
-            _terminal_startup_failure()
+            window.load_html(
+                _splash_html(
+                    theme,
+                    api._native_frame,
+                    # Nothing about files or folders here. Someone looking at
+                    # this screen wants to know what to do, not where we keep
+                    # our notes.
+                    '<h2>Dannify could not start</h2>'
+                    '<p>Close it from the notification area if a copy is '
+                    'still running, then open it again.</p>',
+                )
+            )
 
     def _on_state_change() -> None:
         api._push_state()
@@ -3442,14 +3342,6 @@ def main() -> None:
             shutting_down = bool(user32.GetSystemMetrics(SM_SHUTTINGDOWN))
         except Exception:
             pass
-        if api._update_active and not api._quitting and not shutting_down:
-            threading.Thread(
-                target=api._eval,
-                args=("window.__dannifyUpdateQuitWarning && "
-                      "window.__dannifyUpdateQuitWarning()",),
-                daemon=True,
-            ).start()
-            return False
         if (
             api._close_to_tray
             and not api._quitting
@@ -3478,12 +3370,6 @@ def main() -> None:
                 pass
         try:
             server.should_exit = True
-        except Exception:
-            pass
-        try:
-            note = json.loads(_INSTANCE_FILE.read_text(encoding='utf-8'))
-            if int(note.get('pid', 0)) == os.getpid():
-                _INSTANCE_FILE.unlink(missing_ok=True)
         except Exception:
             pass
 

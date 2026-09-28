@@ -27,12 +27,6 @@ namespace Dannify.Setup.Core
         public static string Str(Dictionary<string, object> o, string key) =>
             o != null && o.TryGetValue(key, out var v) && v is string s ? s : null;
 
-        public static int Int(Dictionary<string, object> o, string key) =>
-            o != null && o.TryGetValue(key, out var v) && v is double n ? (int)n : 0;
-
-        public static bool Bool(Dictionary<string, object> o, string key) =>
-            o != null && o.TryGetValue(key, out var v) && v is bool b && b;
-
         private static void SkipSpace(string s, ref int i)
         {
             while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
