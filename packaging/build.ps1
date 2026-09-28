@@ -117,6 +117,15 @@ $config = Join-Path $app 'config'
 New-Item -ItemType Directory -Force $config | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'config\*.json') $config -Force
 
+Step 'Packed resources'
+$resourcePack = Join-Path $app '_internal\dannify.res'
+& $python (Join-Path $PSScriptRoot 'make_resources.py') `
+    (Join-Path $frontend 'dist') `
+    (Join-Path $backend 'dannify\clients.json') `
+    $resourcePack
+if ($LASTEXITCODE -ne 0) { throw "resource pack failed ($LASTEXITCODE)" }
+if (-not (Test-Path $resourcePack)) { throw "resource pack missing: $resourcePack" }
+
 Step 'Installer program'
 & $dotnet build $csproj -c Release -nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
