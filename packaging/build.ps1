@@ -123,6 +123,9 @@ if ($LASTEXITCODE -ne 0) { throw "installer build failed ($LASTEXITCODE)" }
 $engine = Join-Path $installer 'bin\Release\DannifySetup.exe'
 if (-not (Test-Path $engine)) { throw "installer program missing: $engine" }
 # The launcher travels inside the app, so an update can bring a new one.
+# PyInstaller 6 places bundled data below _internal while the launcher is
+# intentionally kept beside that directory for the install layout.
+New-Item -ItemType Directory -Force $runtime | Out-Null
 Copy-Item $engine (Join-Path $runtime 'launcher.exe') -Force
 Write-Host ("App folder: " + (Size $app))
 
