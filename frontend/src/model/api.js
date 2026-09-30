@@ -52,7 +52,7 @@ function connectWs() {
     wsAttempts = 0
     if (wsOpenedOnce && wsOnMessage) {
       // Anything that changed while the channel was down.
-      wsOnMessage({ data: JSON.stringify({ type: 'library_changed' }) })
+      wsOnMessage({ data: JSON.stringify({ type: 'library_changed', reconnected: true }) })
     }
     wsOpenedOnce = true
   }
@@ -223,6 +223,23 @@ function getArtists() {
 
 function getArtist(name) {
   return API.get(`/api/artists/${encodeURIComponent(name)}`)
+}
+
+// Who the saved artists are online (page id and picture), and one artist's
+// whole online page, for the rest of their page in the library.
+// What the library takes up, and the caches that can be let go.
+function getStorage() {
+  return API.get('/api/storage')
+}
+function clearCaches() {
+  return API.post('/api/storage/clear-caches')
+}
+
+function getArtistLinks() {
+  return API.get('/api/artists-online/links')
+}
+function getArtistOnline(name) {
+  return API.get('/api/artists-online/page', { params: { name } })
 }
 
 // --- Account (YouTube Music sign-in), personalized feeds, likes ---
@@ -401,6 +418,10 @@ export default {
   searchLibrary,
   getArtists,
   getArtist,
+  getArtistLinks,
+  getArtistOnline,
+  getStorage,
+  clearCaches,
   exploreSearch,
   exploreArtist,
   exploreAlbum,
