@@ -2,6 +2,7 @@
 import axios from 'axios' // used to connect to server backend in ./server folder
 import { ref } from 'vue'
 import config from '/src/config.js'
+import { pageIsStale } from '/src/model/staleness'
 
 import { v4 as uuidv4 } from 'uuid'
 
@@ -100,11 +101,7 @@ function getVersion(attempt = 0) {
       const prevItem = readStored('version')
       writeStored('version', res.data)
       appVersion.value = res.data
-      // Reload only after an upgrade (stale cached assets). A first run has
-      // nothing stale: reloading would just flash the window.
-      if (prevItem && prevItem !== '0.0.0' && prevItem != res.data) {
-        location.reload()
-      }
+      if (pageIsStale(prevItem, res.data)) location.reload()
     })
     .catch(() => {
       // Try again rather than settling on a number that is not true. The
