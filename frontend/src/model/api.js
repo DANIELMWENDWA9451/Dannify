@@ -222,9 +222,12 @@ function getArtist(name) {
 function reportClientError(payload) {
   return API.post('/api/client-error', payload)
 }
-// The logs and details in one file, to send when something is wrong.
-function makeProblemReport() {
-  return API.post('/api/support/report')
+// Problem reports, sent from inside the app (see report.py).
+function getReportStatus() {
+  return API.get('/api/support/report/status')
+}
+function sendReport(payload) {
+  return API.post('/api/support/report/send', payload, { timeout: 90000 })
 }
 
 // Playlists made in the app (kept on this PC).
@@ -448,7 +451,8 @@ export default {
   getArtists,
   getArtist,
   reportClientError,
-  makeProblemReport,
+  getReportStatus,
+  sendReport,
   getPlaylists,
   getPlaylist,
   createPlaylist,

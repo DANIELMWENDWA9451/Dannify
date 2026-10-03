@@ -2,6 +2,7 @@ import { createWebHistory, createRouter } from 'vue-router'
 import Home from '/src/views/Home.vue'
 import Library from '/src/views/Library.vue'
 import config from '/src/config'
+import { ensureFullWindow } from '/src/desktop/fullWindow'
 
 // Home and Songs are where the app opens, so they come with it. Every other
 // page is its own file, read the first time it is needed: the window has less
@@ -67,6 +68,12 @@ router.onError((err, to) => {
   }
   if (Date.now() - last < 15000) return
   window.location.assign(to ? router.resolve(to).href : window.location.href)
+})
+
+// Going to a page from the mini player ("Go to artist", "Open" on a notice):
+// the page is the point, so the full window comes back to show it.
+router.afterEach((to, from) => {
+  if (from.matched.length && to.fullPath !== from.fullPath) ensureFullWindow()
 })
 
 // Fetch the other pages once things are quiet, so none waits on its file.

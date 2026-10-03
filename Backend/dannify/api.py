@@ -2076,31 +2076,77 @@ async def client_error_endpoint(payload: dict[str, Any] = Body(default={})) -> d
     return {'logged': True}
 
 
-@router.post('/api/support/report')
-async def support_report_endpoint() -> dict[str, Any]:
-    if not state.data_dir:
-        raise HTTPException(status_code=503, detail='No data folder')
-    facts = {
+def _report_facts() -> dict[str, Any]:
+    return {
         'Library folder': state.settings.get('download_dir') or state.download_dir or '',
         'Playlists': len(playlists_mod.all_playlists()),
         'Window errors this run': len(_window_errors),
     }
-    log_file = os.getenv('DANNIFY_LOG_FILE')
+
+
+@router.get('/api/support/report/status')
+async def support_report_status_endpoint() -> dict[str, Any]:
+    """Whether reporting is open yet, and how many reports wait to go."""
+
+    data = Path(state.data_dir) if state.data_dir else None
+    return {
+        'enabled': report_mod.enabled(),
+        'pending': report_mod.pending(data) if data else 0,
+        'categories': list(report_mod.CATEGORIES),
+    }
+
+
+@router.post('/api/support/report/send')
+async def support_report_send_endpoint(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """Send a problem report (see report.py): what the person wrote, and the
+    diagnostics if they chose to include them. Queued when it cannot go now."""
+
+    if not report_mod.enabled():
+        raise HTTPException(status_code=503, detail='Reporting is not open yet')
+    if not state.data_dir:
+        raise HTTPException(status_code=503, detail='No data folder')
     try:
-        path = await asyncio.to_thread(
-            report_mod.build,
-            Path(state.data_dir),
-            str(state.version or ''),
+        fields = report_mod.clean_fields(
+            payload.get('description'), payload.get('category'), payload.get('contact')
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    data = Path(state.data_dir)
+    report: dict[str, Any] = {'id': report_mod.new_id(), 'version': str(state.version or ''), **fields}
+    if payload.get('include_diagnostics', True):
+        log_file = os.getenv('DANNIFY_LOG_FILE')
+        report['diagnostics'] = await asyncio.to_thread(
+            report_mod.pack,
+            data,
+            report['version'],
             settings=dict(state.settings or {}),
-            facts=facts,
+            facts=_report_facts(),
             window_errors=list(_window_errors),
             log_file=Path(log_file) if log_file else None,
         )
-    except OSError as exc:
-        logger.opt(exception=True).warning('problem report could not be written')
-        raise HTTPException(status_code=500, detail='Could not write the report') from exc
-    logger.info('problem report written: {}', path.name)
-    return {'path': str(path), 'name': path.name, 'size': path.stat().st_size}
+    try:
+        status = await asyncio.to_thread(report_mod.send, data, report)
+    except report_mod.NotOpen as exc:
+        raise HTTPException(status_code=503, detail='Reporting is not open yet') from exc
+    logger.info('problem report {} {}', report['id'], status)
+    return {'id': report['id'], 'status': status}
+
+
+async def flush_reports() -> None:
+    """At startup: reports that could not go before go now, and the zip
+    files 4.3 and 4.4 saved for sending by hand are tidied away."""
+
+    if not state.data_dir:
+        return
+    data = Path(state.data_dir)
+    try:
+        await asyncio.to_thread(report_mod.tidy_old_exports, data)
+        if report_mod.enabled() and report_mod.pending(data):
+            sent, left = await asyncio.to_thread(report_mod.flush, data)
+            if sent:
+                logger.info('sent {} waiting problem report(s); {} still waiting', sent, left)
+    except Exception:
+        logger.opt(exception=True).debug('could not send waiting reports')
 
 
 # ---------------------------------------------------------------------------

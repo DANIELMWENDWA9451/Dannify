@@ -136,6 +136,15 @@
       </button>
       <button
         class="icon-btn is-round"
+        :class="{ 'is-active-dot': ui.panel.value === 'about' && !onNowPlaying && cur }"
+        :disabled="!cur"
+        :title="t('panel.aboutButton')"
+        @click="ui.setPanel('about')"
+      >
+        <Icon icon="ph:vinyl-record" class="h-[18px] w-[18px]" />
+      </button>
+      <button
+        class="icon-btn is-round"
         :class="{ 'is-active-dot': ui.panel.value === 'lyrics' && !onNowPlaying && cur }"
         :disabled="!cur"
         :title="`${t('lyrics.title')} (Ctrl+L)`"
