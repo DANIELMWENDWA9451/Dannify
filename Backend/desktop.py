@@ -49,7 +49,7 @@ import urllib.request
 import webbrowser
 from ctypes import wintypes
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # The shell's own diagnostics. loguru's logger is a singleton, so this is the
 # same sink main.py configures; importing it here is not a second logger.
@@ -3590,6 +3590,29 @@ def _schedule_media_identity() -> None:
 
 
 _OPEN_FILE = _DATA_DIR / 'open.json'
+# When this copy started. A file handed over by a second copy is always
+# written after that (the second copy only hands over once it finds this one
+# running), so anything older was left by an earlier run.
+_STARTED_NS = time.time_ns()
+
+
+def _file_from_note(note: Any, started_ns: int) -> str:
+    """The file a hand-over note asks this copy to play, or ''.
+
+    The note stays on disk after it is read. Each new run read it afresh and
+    played it: a song double-clicked days ago began by itself the next time
+    Dannify was opened.
+    """
+
+    if not isinstance(note, dict):
+        return ''
+    try:
+        stamp = int(note.get('n') or 0)
+    except (TypeError, ValueError):
+        return ''
+    if stamp < started_ns:
+        return ''
+    return str(note.get('path') or '')
 
 
 def _file_argument() -> str:
@@ -3646,7 +3669,7 @@ def _watch_for_opened_files() -> None:
             if not stamp or stamp == last:
                 continue
             last = stamp
-            wanted = str(note.get('path') or '')
+            wanted = _file_from_note(note, _STARTED_NS)
         except Exception:
             continue
         if wanted:

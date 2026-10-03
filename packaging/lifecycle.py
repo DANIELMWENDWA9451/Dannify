@@ -119,7 +119,23 @@ def check(label, ok, detail=''):
     print(('PASS ' if ok else 'FAIL ') + label + (f'  [{detail}]' if detail else ''), flush=True)
     if not ok:
         FAILED.append(label)
+        keep_logs(len(FAILED))
     return ok
+
+
+def keep_logs(n):
+    """The app's and the setup's logs as they were at a failure. The next
+    stage starts from a clean install and takes them with it, and twice that
+    left a failure with nothing to go on."""
+    for name in ('dannify.log', 'setup.log'):
+        src = DATA / name
+        if src.is_file():
+            dst = SCR / f'{NAME}-fail{n}-{name}'
+            try:
+                dst.write_bytes(src.read_bytes())
+                print(f'     kept {dst}', flush=True)
+            except OSError:
+                pass
 
 
 def sha(p):
