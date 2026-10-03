@@ -327,6 +327,13 @@ function discardUpdate() {
 function exploreSearch(q, limit = 20) {
   return API.get('/api/explore/search', { params: { q, limit } })
 }
+// Moods and genres (Search before anything is typed).
+function getMoods() {
+  return API.get('/api/explore/moods')
+}
+function getMoodPlaylists(params) {
+  return API.get('/api/explore/moods/playlists', { params: { params } })
+}
 function exploreArtist(id) {
   return API.get('/api/explore/artist', { params: { id } })
 }
@@ -467,6 +474,8 @@ export default {
   refreshArtists,
   exploreSearch,
   exploreArtist,
+  getMoods,
+  getMoodPlaylists,
   exploreAlbum,
   explorePlaylist,
   // account + personalization

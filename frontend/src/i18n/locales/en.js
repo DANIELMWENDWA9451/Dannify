@@ -155,6 +155,7 @@ export default {
     resize: 'Drag to resize',
   },
   search: {
+    browseAll: 'Browse all',
     inLibrary: 'In your library',
     placeholder: 'Search songs, artists, albums, playlists…',
     title: 'Search results',
@@ -902,5 +903,15 @@ export default {
     reference: 'Reference {id}',
     notOpen: 'Reporting is not open yet.',
     failed: 'The report could not be sent. Try again in a moment.',
+  },
+  sound: {
+    title: 'Sound',
+    allSettings: 'All sound settings',
+  },
+  browse: {
+    eyebrow: 'Browse',
+    playlistCount: '{count} playlist | {count} playlists',
+    failedTitle: 'This could not be opened',
+    failedText: 'Check your connection, then try again.',
   },
 }

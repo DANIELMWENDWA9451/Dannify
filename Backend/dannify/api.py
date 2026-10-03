@@ -1137,6 +1137,24 @@ async def explore_album_endpoint(id: str = Query(...)) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.get('/api/explore/moods')
+async def explore_moods_endpoint() -> dict[str, Any]:
+    try:
+        return {'sections': await asyncio.to_thread(explorer.moods)}
+    except Exception as exc:
+        logger.opt(exception=True).info('moods and genres failed')
+        raise HTTPException(status_code=502, detail='unavailable') from exc
+
+
+@router.get('/api/explore/moods/playlists')
+async def explore_mood_playlists_endpoint(params: str = Query(..., max_length=400)) -> dict[str, Any]:
+    try:
+        return {'playlists': await asyncio.to_thread(explorer.mood_playlists, params)}
+    except Exception as exc:
+        logger.opt(exception=True).info('mood playlists failed')
+        raise HTTPException(status_code=502, detail='unavailable') from exc
+
+
 @router.get('/api/explore/playlist')
 async def explore_playlist_endpoint(
     id: str = Query(...), limit: int = Query(200)

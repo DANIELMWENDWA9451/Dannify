@@ -18,6 +18,7 @@ const NowPlaying = () => import('/src/views/NowPlaying.vue')
 const ExploreArtist = () => import('/src/views/ExploreArtist.vue')
 const ExploreCollection = () => import('/src/views/ExploreCollection.vue')
 const Settings = () => import('/src/views/Settings.vue')
+const Mood = () => import('/src/views/Mood.vue')
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -43,6 +44,7 @@ const routes = [
     props: { mode: 'playlist' },
   },
   { path: '/settings', name: 'Settings', component: Settings },
+  { path: '/browse/:params', name: 'Mood', component: Mood },
   { path: '/:pathMatch(.*)*', redirect: { name: 'Home' } },
 ]
 
@@ -78,7 +80,7 @@ router.afterEach((to, from) => {
 
 // Fetch the other pages once things are quiet, so none waits on its file.
 function warmPages() {
-  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings]) {
+  for (const load of [Search, Artists, Artist, Downloads, Liked, Playlist, NowPlaying, ExploreArtist, ExploreCollection, Settings, Mood]) {
     load().catch(() => {})
   }
 }

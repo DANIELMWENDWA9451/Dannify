@@ -297,7 +297,7 @@ const pins = computed(() => {
       label: t('nav.yourSongs'),
       sub: t('nav.artistSongs', { count: n }),
       icon: 'ph:music-notes-fill',
-      tile: 'is-songs',
+      tile: 'tile-songs',
       pinned: true,
       active: route.name === 'Library',
     },
@@ -307,7 +307,7 @@ const pins = computed(() => {
       label: t('account.likedSongs'),
       sub: `${t('playlists.playlist')} · ${t('nav.artistSongs', { count: account.liked.value.length })}`,
       icon: 'ph:heart-fill',
-      tile: 'is-liked',
+      tile: 'tile-liked',
       pinned: true,
       active: route.name === 'Liked',
     },
@@ -317,7 +317,7 @@ const pins = computed(() => {
       label: t('nav.artists'),
       sub: t('nav.artistCount', { count: lib.artists.value.length }),
       icon: 'ph:users-three-fill',
-      tile: 'is-artists',
+      tile: 'tile-artists',
       pinned: true,
       active: route.name === 'Artists',
     },
@@ -327,7 +327,7 @@ const pins = computed(() => {
       label: t('nav.downloads'),
       sub: dl.value.active ? t('nav.downloadingNow', { count: dl.value.active }) : t('nav.downloadsSub'),
       icon: 'ph:download-simple-bold',
-      tile: 'is-downloads',
+      tile: 'tile-downloads',
       badge: dl.value.active || null,
       active: route.name === 'Downloads',
     },
@@ -562,18 +562,6 @@ const SideLink = {
   color: #fff;
 }
 /* The pinned collections, each with a colour of its own. */
-.sb-tile.is-songs {
-  background: linear-gradient(135deg, rgb(var(--c-accent)), rgb(var(--c-accent) / 0.45));
-}
-.sb-tile.is-liked {
-  background: linear-gradient(135deg, #4a2fbd, #8fb6e6);
-}
-.sb-tile.is-artists {
-  background: linear-gradient(135deg, #b5523b, #e8a33d);
-}
-.sb-tile.is-downloads {
-  background: linear-gradient(135deg, #1e6f86, #46b5a6);
-}
 .sb-tile.is-new {
   background: rgb(var(--c-tint) / 0.08);
   color: rgb(var(--c-fg) / 0.75);

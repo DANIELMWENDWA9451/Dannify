@@ -155,6 +155,7 @@ export default {
     resize: 'Faites glisser pour redimensionner',
   },
   search: {
+    browseAll: 'Tout parcourir',
     inLibrary: 'Dans votre bibliothèque',
     placeholder: 'Rechercher titres, artistes, albums, playlists…',
     title: 'Résultats de recherche',
@@ -905,5 +906,15 @@ export default {
     reference: 'Référence {id}',
     notOpen: 'Les rapports ne sont pas encore ouverts.',
     failed: 'Le rapport n\u2019a pas pu être envoyé. Réessayez dans un instant.',
+  },
+  sound: {
+    title: 'Son',
+    allSettings: 'Tous les réglages du son',
+  },
+  browse: {
+    eyebrow: 'Parcourir',
+    playlistCount: '{count} playlist | {count} playlists',
+    failedTitle: 'Impossible d’ouvrir cette page',
+    failedText: 'Vérifiez votre connexion, puis réessayez.',
   },
 }
