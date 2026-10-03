@@ -89,14 +89,21 @@ async function loadFollowing() {
   }
 }
 
-function isFollowing(channelId) {
-  return !!channelId && followingIds.value.has(channelId)
+// An artist can have two ids: their page's (browse_id, which is what the
+// list of followed artists holds) and their channel's (channel_id, which is
+// what following is done with). They are often different, and checking
+// only the channel had an artist the side bar listed as followed showing
+// "Follow" on their own page. Either one in the list means followed.
+function isFollowing(...ids) {
+  return ids.some((id) => !!id && followingIds.value.has(id))
 }
 
 /** Follow or stop following an artist on YouTube Music (optimistic). */
 async function toggleFollow(artist) {
   const id = artist && (artist.channel_id || artist.browse_id)
   if (!id) return false
+  const ids = [artist.channel_id, artist.browse_id].filter(Boolean)
+  const page = artist.browse_id || id
   if (!signedIn.value) {
     toast(t('account.signInToFollow'), {
       icon: 'ph:user-plus',
@@ -104,27 +111,23 @@ async function toggleFollow(artist) {
     })
     return false
   }
-  const next = !isFollowing(id)
-  const ids = new Set(followingIds.value)
-  if (next) ids.add(id)
-  else ids.delete(id)
-  followingIds.value = ids
+  const next = !isFollowing(...ids)
+  const before = followingIds.value
+  const now = new Set(before)
+  for (const each of ids) {
+    if (next) now.add(each)
+    else now.delete(each)
+  }
+  followingIds.value = now
   try {
     await API.setFollowing(id, next)
-    if (next) {
-      following.value = [
-        { type: 'artist', browse_id: id, name: artist.name || '', cover_url: artist.cover_url || '' },
-        ...following.value.filter((a) => a.browse_id !== id),
-      ]
-    } else {
-      following.value = following.value.filter((a) => a.browse_id !== id)
-    }
+    const others = following.value.filter((a) => !ids.includes(a.browse_id))
+    following.value = next
+      ? [{ type: 'artist', browse_id: page, name: artist.name || '', cover_url: artist.cover_url || '' }, ...others]
+      : others
     return true
   } catch {
-    const back = new Set(followingIds.value)
-    if (next) back.delete(id)
-    else back.add(id)
-    followingIds.value = back
+    followingIds.value = before
     toast(t('account.followFailed'), { tone: 'error' })
     return false
   }

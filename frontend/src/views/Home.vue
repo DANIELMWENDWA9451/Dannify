@@ -231,7 +231,7 @@ import { useDeferred } from '/src/model/deferred'
 import { desktop } from '/src/desktop/bridge'
 import { usePlayer } from '/src/model/player'
 import { useLibrary } from '/src/model/library'
-import { useRecent, trackKey } from '/src/model/recent'
+import { useRecent, sameSong } from '/src/model/recent'
 import { useHomeFeed } from '/src/model/home'
 import { useConnectivity, whenOnline } from '/src/model/connectivity'
 import { useAccount } from '/src/model/account'
@@ -389,7 +389,7 @@ function playRecent(i) {
   const list = recent.played.value
   const tr = list[i]
   if (!tr) return
-  if (player.currentTrack.value && trackKey(player.currentTrack.value) === trackKey(tr)) {
+  if (player.currentTrack.value && sameSong(player.currentTrack.value, tr)) {
     player.toggle()
     return
   }

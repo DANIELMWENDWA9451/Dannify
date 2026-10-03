@@ -6,7 +6,7 @@
     class="follow-btn press"
     :class="{ 'is-on': on }"
     :title="on ? t('account.unfollowHint') : t('account.followHint')"
-    @click="account.toggleFollow({ channel_id: channelId, name, cover_url: cover })"
+    @click="account.toggleFollow({ channel_id: channelId, browse_id: browseId, name, cover_url: cover })"
   >
     <Icon :icon="on ? 'ph:check-bold' : 'ph:user-plus'" class="h-4 w-4" />
     {{ on ? t('account.following') : t('account.follow') }}
@@ -21,13 +21,16 @@ import { useI18n } from '/src/i18n'
 
 const props = defineProps({
   channelId: { type: String, default: '' },
+  // The artist's page, when it is not the channel: the followed list holds
+  // this one.
+  browseId: { type: String, default: '' },
   name: { type: String, default: '' },
   cover: { type: String, default: '' },
 })
 
 const { t } = useI18n()
 const account = useAccount()
-const on = computed(() => account.isFollowing(props.channelId))
+const on = computed(() => account.isFollowing(props.channelId, props.browseId))
 </script>
 
 <style scoped>

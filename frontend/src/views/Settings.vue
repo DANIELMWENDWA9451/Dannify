@@ -531,20 +531,11 @@
         </label>
       </section>
 
-      <!-- Downloads. Format, quality and playlist files used to be chosen
-           here. Saved songs play only in Dannify, so what is inside them is
-           ours to pick (the stream as it comes, nothing converted), and a
-           playlist file for other players listed songs none of them can
-           open. -->
+      <!-- Downloads. How a saved song is kept is the app's business, not a
+           setting or something to explain: format, quality and playlist
+           files are not offered. -->
       <section v-show="showPane('library')">
         <h2 class="group-title">{{ t('settings.downloadsSection') }}</h2>
-        <div class="row">
-          <Icon icon="ph:seal-check" class="row-icon text-accent" />
-          <div class="row-text">
-            <p class="row-label">{{ t('settings.savedFormat') }}</p>
-            <p class="row-hint">{{ t('settings.savedFormatHint') }}</p>
-          </div>
-        </div>
         <div class="row">
           <Icon icon="ph:stack" class="row-icon" />
           <div class="row-text">

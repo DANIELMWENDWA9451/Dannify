@@ -84,6 +84,7 @@
           <FollowButton
             v-if="artist"
             :channel-id="artist.channel_id || (String(artist.browse_id || '').startsWith('UC') ? artist.browse_id : '')"
+            :browse-id="artist.browse_id || ''"
             :name="artist.name"
             :cover="artist.cover_url || ''"
           />

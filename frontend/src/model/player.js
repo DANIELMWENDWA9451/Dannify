@@ -1,6 +1,7 @@
-import { ref, shallowRef, computed } from 'vue'
+import { ref, shallowRef, computed, watch } from 'vue'
 import API from '/src/model/api'
 import { useLibraryIndex } from '/src/model/libraryIndex'
+import { useLibrary } from '/src/model/library'
 import { useUi } from '/src/model/ui'
 import { rememberPlayed } from '/src/model/recent'
 import { notePlayed } from '/src/model/support'
@@ -805,41 +806,24 @@ function makeElement() {
         readyState: audio.readyState,
         src: audio.currentSrc,
       })
-      deadRun += 1
-      if (deadRun >= DEAD_RUN_LIMIT) {
-        toast(t('player.manyUnplayable'), { tone: 'error' })
-        isPlaying.value = false
-        deadRun = 0
-        return
-      }
-      // Which message depends on why, and the audio element cannot say why:
-      // a 404 and a 409 both reach it as MEDIA_ERR_SRC_NOT_SUPPORTED. So ask
-      // the server. A 409 is the backend's answer for a container this
-      // installation has no key for, and telling that person their file may
-      // have been moved or deleted sends them looking in the wrong place for
-      // a file that is sitting right there.
+      // Why, first: the audio element cannot say (a 404 and a 409 both reach
+      // it as MEDIA_ERR_SRC_NOT_SUPPORTED), so the server is asked. A file
+      // that is simply not there any more is not a failure at all when the
+      // song is on YouTube Music: it goes on from there, where it was.
       const src = audio.currentSrc
-      const fallback = err && err.code === 3 ? 'fileUnreadable' : 'fileUnplayable'
-      // A file that is there and will not play can be repaired. One that is
-      // not there cannot: that is somebody having moved or deleted it.
-      const file = track.file && /\/downloads\//.test(src) ? track.file : ''
-      // Named: two broken songs are two messages, each with its own Repair
-      // button. One wording for all of them merged them into a single
-      // message whose button repaired only the newer file.
-      const say = (kind, status) =>
-        toast(t(`player.${kind}`, { title: track.title || t('common.unknownTrack') }), {
-          tone: 'error',
-          ...(kind === 'fileUnreadable' ? repairAction(file, status !== 409) : {}),
-        })
+      const gen = playGen
+      const at = currentTime.value
       fetch(src, { method: 'HEAD' })
-        .then((probe) => {
-          if (probe.status === 409) say('fileUnreadable', 409)
-          else if (probe.status === 404) say('fileUnplayable', 404)
-          else say(fallback, probe.status)
+        .then(
+          (probe) => probe.status,
+          () => 0
+        )
+        .then((status) => {
+          if (gen !== playGen || currentTrack.value !== track) return
+          const copy = status === 404 ? onlineCopyOf(track) : null
+          if (copy) useOnlineCopy(currentIndex.value, copy, at)
+          else savedTrackFailed(track, err, src, status)
         })
-        .catch(() => say(fallback, 0))
-      if (hasNextInOrder()) next()
-      else isPlaying.value = false
       return
     }
     const gen = playGen
@@ -850,6 +834,15 @@ function makeElement() {
     // there "playing" with no sound and a frozen bar.
     reportNetworkFailure().then((isOnline) => {
       if (gen !== playGen || currentTrack.value !== track) return
+      if (!isOnline && track.savedCopyGone && hasNextInOrder()) {
+        // Its saved copy has gone and there is no connection to play it
+        // from. Waiting here would hold up every saved song after it.
+        toast(t('player.notSavedOffline', { title: track.title || t('common.unknownTrack') }), {
+          key: 'not-saved-offline',
+        })
+        next()
+        return
+      }
       if (!isOnline) {
         // Died because the network did: carry on when it is back.
         whenOnline(() => {
@@ -863,7 +856,7 @@ function makeElement() {
       // address that a fresh request replaces, so try again quietly.
       if (!streamRetried.has(track)) {
         streamRetried.add(track)
-        playAt(currentIndex.value)
+        playAt(currentIndex.value, { again: true })
         if (at > 1) setTimeout(() => seek(at), 600)
         return
       }
@@ -916,6 +909,136 @@ function makeElement() {
 // there.
 const fileUrl = (file) => API.downloadFileURL(file)
 const coverUrl = (file) => API.coverFileURL(file)
+
+// ---------------------------------------------------------------------------
+// Saved songs that are not saved any more
+// ---------------------------------------------------------------------------
+// A song deleted from this computer (here, or in Explorer) is usually still
+// on YouTube Music. The queue used to find out by trying: the song failed,
+// a message said it "may have been moved or deleted", and it was skipped,
+// though it would have played perfectly well online.
+
+const _library = useLibrary()
+const YT_VIDEO = /^[A-Za-z0-9_-]{11}$/
+
+/** The YouTube Music copy of a saved song, or null when it has none. */
+function onlineCopyOf(track) {
+  const vid = track && track.video_id
+  if (!vid || !YT_VIDEO.test(vid)) return null
+  return {
+    type: 'stream',
+    file: null,
+    song_id: vid,
+    video_id: vid,
+    spotify_url: '',
+    url: API.streamURL(vid),
+    // Its picture was in the file. YouTube Music's is asked for when the
+    // song comes up (one request, not one per song in a long queue).
+    cover: '',
+    title: track.title || '',
+    artist: track.artist || '',
+    album: track.album || '',
+    duration: track.duration || 0,
+    savedCopyGone: true,
+  }
+}
+
+function fillOnlineDetails(track) {
+  API.resolveStream(`https://music.youtube.com/watch?v=${track.video_id}`)
+    .then((res) => {
+      const song = (res && res.data) || {}
+      if (song.cover_url && !track.cover) track.cover = song.cover_url
+      if (!track.duration && song.duration > 0) track.duration = song.duration
+      if (currentTrack.value !== track) return
+      syncMediaSession()
+      // Its tile on Home now has the picture, in place of the saved
+      // copy's, which went with the file.
+      rememberPlayed(track)
+    })
+    .catch(() => {
+      // Offline, or YouTube said no: the song plays without a picture.
+    })
+}
+
+/** Put the online copy in a saved song's place and play it from *at*. */
+function useOnlineCopy(index, copy, at = 0) {
+  if (index < 0 || index >= playlist.value.length) return
+  const list = [...playlist.value]
+  list[index] = copy
+  playlist.value = list
+  playAt(index, { again: true })
+  if (at > 1) setTimeout(() => seek(at), 600)
+}
+
+// A saved song that would not play, and has no online copy to go to.
+function savedTrackFailed(track, err, src, status) {
+  // Skipping raises the next error, which skips again, so one click on a
+  // folder of bad files walked the whole queue and stacked a toast for each.
+  // It stops after a few in a row, and says that instead.
+  deadRun += 1
+  if (deadRun >= DEAD_RUN_LIMIT) {
+    toast(t('player.manyUnplayable'), { tone: 'error' })
+    isPlaying.value = false
+    deadRun = 0
+    return
+  }
+  const title = track.title || t('common.unknownTrack')
+  const index = currentIndex.value
+  if (status === 404) {
+    // Not there any more, and nowhere else to play it from: said once, and
+    // out of the queue so it does not come round again.
+    toast(t('player.fileGone', { title }), { key: `gone:${track.file}` })
+    if (hasNextInOrder()) next()
+    else isPlaying.value = false
+    if (playlist.value[index] === track) removeFromQueue(index)
+    return
+  }
+  // A 409 is the backend's answer for a container this installation has no
+  // key for: the file is right there, so it is offered a repair rather than
+  // a hint that it was moved. Named, so two broken songs are two messages,
+  // each with its own Repair button.
+  const kind = status === 409 || (err && err.code === 3) ? 'fileUnreadable' : 'fileUnplayable'
+  const file = track.file && /\/downloads\//.test(src) ? track.file : ''
+  toast(t(`player.${kind}`, { title }), {
+    tone: 'error',
+    ...(kind === 'fileUnreadable' ? repairAction(file, status !== 409) : {}),
+  })
+  if (hasNextInOrder()) next()
+  else isPlaying.value = false
+}
+
+// Put the queue right whenever the library is read again (a download, a
+// delete here, a file moved in Explorer, coming back to the window): a saved
+// song whose file has gone plays from its new place if it was only moved,
+// from YouTube Music if it is there, and otherwise leaves the queue, before
+// it ever comes up. The playing song is left to finish what it has.
+function settleMissingSaved() {
+  if (!_library.loaded.value || _library.error.value) return
+  const list = playlist.value
+  if (!list.length) return
+  const saved = new Set()
+  const byVideo = new Map()
+  for (const tr of _library.tracks.value) {
+    if (!tr || !tr.file) continue
+    saved.add(tr.file)
+    if (tr.video_id && !tr.problem) byVideo.set(tr.video_id, tr.file)
+  }
+  let swapped = null
+  const gone = []
+  list.forEach((tr, i) => {
+    if (!tr || tr.type !== 'local' || !tr.file || saved.has(tr.file)) return
+    if (i === currentIndex.value) return
+    const moved = tr.video_id && byVideo.get(tr.video_id)
+    const replacement = moved
+      ? { ...tr, file: moved, url: API.downloadFileURL(moved), cover: API.coverFileURL(moved) }
+      : onlineCopyOf(tr)
+    if (replacement) (swapped || (swapped = [...list]))[i] = replacement
+    else gone.push(i)
+  })
+  if (swapped) playlist.value = swapped
+  for (const i of gone.reverse()) removeFromQueue(i)
+}
+watch([() => _library.tracks.value, () => _library.loaded.value], settleMissingSaved)
 
 function trackFromFile(file) {
   const noExt = file.replace(/\.[^.]+$/, '')
@@ -1627,7 +1750,9 @@ function mediaCommand(cmd) {
 // *autoplay* false loads the track and leaves it paused, for a change of
 // track the listener did not ask to hear (removing the playing one while
 // paused).
-function playAt(index, { autoplay = true, fade = null } = {}) {
+// *again*: the same song started over (a retry, its online copy taking over
+// from a saved file that went), which is not another listen to record.
+function playAt(index, { autoplay = true, fade = null, again = false } = {}) {
   if (index < 0 || index >= playlist.value.length) return
   ensureAudio()
   cancelTransition()
@@ -1715,11 +1840,14 @@ function playAt(index, { autoplay = true, fade = null } = {}) {
   }
   loadLyricsForCurrent()
   syncMediaSession()
-  rememberPlayed(track)
-  notePlayed()
-  // For whoever keeps a history of listens (the YouTube Music account).
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent('dannify:played', { detail: track }))
+  if (track.savedCopyGone && !track.cover) fillOnlineDetails(track)
+  if (!again) {
+    rememberPlayed(track)
+    notePlayed()
+    // For whoever keeps a history of listens (the YouTube Music account).
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('dannify:played', { detail: track }))
+    }
   }
   saveSession()
   // First-play affordance: surface the lyrics panel the very first time

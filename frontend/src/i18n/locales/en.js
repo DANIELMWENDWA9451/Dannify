@@ -273,16 +273,13 @@ export default {
     uiScaleLarge: 'Large',
     searchPlaceholder: 'Search settings',
     noMatches: 'No setting matches “{query}”.',
-    savedFormat: 'Saved songs',
-    savedFormatHint:
-      'Kept in Dannify’s own protected format, exactly as YouTube Music streams them: no conversion, nothing lost, and they play only here.',
     storage: 'Storage',
     librarySize: 'Your library',
     librarySizeHint: '{songs} · {size} · {free} free on this drive',
     librarySizeLoading: 'Measuring…',
     clearCaches: 'Clear caches',
     clearCachesHint:
-      'Looked-up lyrics, stream links, player code and artist pictures ({size}). They come back as needed. Your music and your own lyrics stay.',
+      'Lyrics, pictures and other things kept to make Dannify quicker ({size}). They come back as needed. Your music and your own lyrics stay.',
     cachesCleared: 'Caches cleared',
     clearFailed: 'Could not clear the caches',
     normalize: 'Even out loudness',
@@ -355,14 +352,6 @@ export default {
     lyricsSidecarHint: 'Each song’s lyrics sit beside it in its folder.',
     lyricsCentral: 'In one folder',
     lyricsCentralHint: 'All lyrics are kept together in a .lyrics folder inside your library.',
-    format: 'Format',
-    formatHint: 'Audio format for new downloads.',
-    quality: 'Quality',
-    qualityHint: 'Bitrate for lossy formats.',
-    qualityIgnored: 'Ignored for lossless FLAC.',
-    generateM3u: 'Generate M3U files for playlists',
-    generateM3uHint:
-      'Writes Playlists/<name>.m3u alongside the tracks when you download an album or playlist.',
     organizationSection: 'File organization',
     organizeByArtist: 'Organize by artist',
     organizeByArtistHint:
@@ -466,6 +455,8 @@ export default {
     sleepOff: 'Turn off',
     sleepStopsIn: 'Stops in {count} minute | Stops in {count} minutes',
     sleepAfterSong: 'Stops after this song',
+    fileGone: '“{title}” is no longer on this computer.',
+    notSavedOffline: '“{title}” is no longer saved on this computer. It will play when you are back online.',
     fileUnplayable: '{title} would not play. It may have been moved or deleted.',
     manyUnplayable:
       'Several saved files in a row would not play. Stopped there.',
@@ -572,7 +563,7 @@ export default {
     inTime: 'In time',
     wordsOnly: 'Words only',
     back: 'Back',
-    stampLine: 'Tap to set this line at the current playback time',
+    stampLine: 'Click to set this line at the current playback time',
     undo: 'Undo',
     reset: 'Clear all',
     linesStamped: 'Stamped',
@@ -688,7 +679,7 @@ export default {
     connecting: 'Opening Google…',
     connected: 'Signed in',
     connectedHint:
-      'Your YouTube Music home, likes and playlists are in sync, and downloads stop hitting the bot check.',
+      'Your YouTube Music home, likes, playlists and artists are here, and saving songs is quicker and more reliable.',
     signedOutTitle: 'Not signed in',
     signedOutHint:
       'Sign in with Google to get your own YouTube Music recommendations, liked songs and reliable downloads.',
@@ -712,7 +703,7 @@ export default {
     likedSignedOutText:
       'Sign in with Google and every song you like on YouTube Music shows up here, ready to play or download.',
     likedEmptyTitle: 'Nothing liked yet',
-    likedEmptyText: 'Tap the heart on any song and it lands here.',
+    likedEmptyText: 'Click the heart on any song and it lands here.',
   },
   onboarding: {
     label: 'Welcome',

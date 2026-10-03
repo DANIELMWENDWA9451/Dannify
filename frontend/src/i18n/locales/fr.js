@@ -275,16 +275,13 @@ export default {
     uiScaleLarge: 'Grande',
     searchPlaceholder: 'Rechercher un réglage',
     noMatches: 'Aucun réglage ne correspond à « {query} ».',
-    savedFormat: 'Titres enregistrés',
-    savedFormatHint:
-      'Gardés dans le format protégé de Dannify, tels que YouTube Music les diffuse : sans conversion, sans perte, et lisibles uniquement ici.',
     storage: 'Stockage',
     librarySize: 'Votre bibliothèque',
     librarySizeHint: '{songs} · {size} · {free} libres sur ce disque',
     librarySizeLoading: 'Calcul…',
     clearCaches: 'Vider les caches',
     clearCachesHint:
-      'Paroles recherchées, liens de lecture, code du lecteur et photos d’artistes ({size}). Ils reviennent au besoin. Votre musique et vos paroles restent.',
+      'Paroles, images et autres éléments gardés pour accélérer Dannify ({size}). Ils reviennent au besoin. Votre musique et vos paroles restent.',
     cachesCleared: 'Caches vidés',
     clearFailed: 'Impossible de vider les caches',
     normalize: 'Égaliser le volume',
@@ -358,14 +355,6 @@ export default {
     lyricsSidecarHint: 'Les paroles de chaque chanson sont à côté d’elle, dans son dossier.',
     lyricsCentral: 'Dans un seul dossier',
     lyricsCentralHint: 'Toutes les paroles sont rangées ensemble dans un dossier .lyrics de votre bibliothèque.',
-    format: 'Format',
-    formatHint: 'Format audio des nouveaux téléchargements.',
-    quality: 'Qualité',
-    qualityHint: 'Débit des formats avec perte.',
-    qualityIgnored: 'Ignoré pour le FLAC sans perte.',
-    generateM3u: 'Générer des fichiers M3U pour les playlists',
-    generateM3uHint:
-      'Écrit Playlists/<nom>.m3u à côté des titres quand vous téléchargez un album ou une playlist.',
     organizationSection: 'Organisation des fichiers',
     organizeByArtist: 'Organiser par artiste',
     organizeByArtistHint:
@@ -469,6 +458,8 @@ export default {
     sleepOff: 'Désactiver',
     sleepStopsIn: 'Arrêt dans {count} minute | Arrêt dans {count} minutes',
     sleepAfterSong: 'Arrêt après ce titre',
+    fileGone: "« {title} » n'est plus sur cet ordinateur.",
+    notSavedOffline: "« {title} » n'est plus enregistré sur cet ordinateur. Il sera lu dès que vous serez en ligne.",
     fileUnplayable: "{title} n'a pas pu être lu. Le fichier a peut-être été déplacé ou supprimé.",
     manyUnplayable:
       "Plusieurs fichiers enregistrés de suite n'ont pas pu être lus. Arrêt ici.",
@@ -691,7 +682,7 @@ export default {
     connecting: 'Ouverture de Google…',
     connected: 'Connecté',
     connectedHint:
-      'Votre accueil YouTube Music, vos favoris et vos playlists sont synchronisés, et les téléchargements évitent la vérification anti-robot.',
+      'Votre accueil YouTube Music, vos favoris, vos playlists et vos artistes sont ici, et l’enregistrement des titres est plus rapide et plus fiable.',
     signedOutTitle: 'Non connecté',
     signedOutHint:
       'Connectez-vous avec Google pour retrouver vos recommandations YouTube Music, vos titres aimés et des téléchargements fiables.',
@@ -715,7 +706,7 @@ export default {
     likedSignedOutText:
       'Connectez-vous avec Google et chaque titre aimé sur YouTube Music apparaît ici, prêt à écouter ou télécharger.',
     likedEmptyTitle: 'Aucun titre aimé',
-    likedEmptyText: 'Touchez le cœur sur un titre et il atterrit ici.',
+    likedEmptyText: 'Cliquez sur le cœur d’un titre et il atterrit ici.',
   },
   onboarding: {
     label: 'Bienvenue',

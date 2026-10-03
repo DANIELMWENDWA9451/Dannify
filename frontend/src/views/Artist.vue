@@ -100,6 +100,7 @@
           <FollowButton
             v-if="online"
             :channel-id="online.channel_id || (String(online.browse_id || '').startsWith('UC') ? online.browse_id : '')"
+            :browse-id="online.browse_id || ''"
             :name="online.name || artist.name"
             :cover="online.cover_url || ''"
           />

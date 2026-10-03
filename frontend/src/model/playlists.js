@@ -100,6 +100,20 @@ function sameSong(a, b) {
   return !!a.file && a.file === b.file
 }
 
+// The library's songs by file, made once per reading of the library: each
+// row used to search the whole library for its file, which for a long
+// playlist and a big library was millions of comparisons per redraw.
+let byFileOf = null
+let byFile = new Map()
+function savedByFile() {
+  const tracks = useLibrary().tracks.value
+  if (tracks !== byFileOf) {
+    byFileOf = tracks
+    byFile = new Map(tracks.map((tr) => [tr.file, tr]))
+  }
+  return byFile
+}
+
 /**
  * A playlist entry as a table row: the saved file when it is still there
  * (or the same song saved again under another name), the song online when
@@ -107,11 +121,11 @@ function sameSong(a, b) {
  * removing whatever the table shows.
  */
 export function entryRow(entry, index) {
-  const lib = useLibrary()
   const index_ = useLibraryIndex()
-  let file = entry.file && lib.tracks.value.some((tr) => tr.file === entry.file) ? entry.file : ''
+  const byFile = savedByFile()
+  let file = entry.file && byFile.has(entry.file) ? entry.file : ''
   if (!file && entry.video_id) file = index_.localFileFor({ video_id: entry.video_id }) || ''
-  const saved = file ? lib.tracks.value.find((tr) => tr.file === file) : null
+  const saved = file ? byFile.get(file) : null
   let row
   if (saved) {
     row = localRow(saved)
