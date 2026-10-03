@@ -857,6 +857,15 @@ def stage_setup_over_previous():
     mark = len(app_log())
     code, took = run([str(SETUP), '--quiet', '--sandbox', NAME, '--root', str(ROOT), '--data', str(DATA)])
     check(f'quiet setup over a running {PREVIOUS} exits 0', code == 0, f'{code} in {took:.1f}s')
+    if code != 0:
+        # The next stage starts from a clean install and takes this log with
+        # it: say what the setup said while it is still here.
+        log = DATA / 'setup.log'
+        if log.exists():
+            lines = log.read_text(encoding='utf-8', errors='replace').splitlines()[-40:]
+            print('  setup.log:')
+            for line in lines:
+                print('    ' + line)
     check(f'{PREVIOUS} was closed for it', not procs_under(ROOT / 'app'))
     same, count = same_files(ROOT / 'app', new)
     check(f'app folder is the {VERSION} build', same == len(new) == count, f'{same}/{len(new)}, {count} installed')
