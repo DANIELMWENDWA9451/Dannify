@@ -8,6 +8,7 @@ import { useLibrary } from '/src/model/library'
 import { useLibraryIndex } from '/src/model/libraryIndex'
 import { localRow, songRow, songVideoId } from '/src/model/tracks'
 import { t } from '/src/i18n'
+import { useAccount } from '/src/model/account'
 
 // Playlists the listener makes. They live on this PC (Backend/dannify/
 // playlists.py), not in a Google account, so they work signed out and
@@ -227,15 +228,51 @@ async function addRows(pid, rows) {
   }
 }
 
+/** Add `rows` to one of the account's YouTube Music playlists. */
+async function addRowsToYouTube(playlist, rows) {
+  const ids = rows.map((r) => songVideoId(r) || (r.raw && r.raw.video_id) || '').filter(Boolean)
+  if (!ids.length) return
+  try {
+    await useAccount().addToYouTubePlaylist(playlist, ids)
+    toast(
+      ids.length === 1
+        ? t('account.addedToYt', { name: playlist.name })
+        : t('account.addedToYtMany', { count: ids.length, name: playlist.name }),
+      { icon: 'ph:youtube-logo', key: `yt:${playlist.browse_id}` }
+    )
+  } catch {
+    toast(t('account.ytAddFailed'), { tone: 'error', icon: 'ph:warning' })
+  }
+}
+
 /** The menu of playlists to add `rows` to. */
-function pickerItems(rows) {
+function pickerItems(rows, all = false) {
+  const account = useAccount()
+  // Liked Music fills itself from likes, and Episodes for Later is podcasts.
+  const yt = account.signedIn.value
+    ? (account.playlists.value || []).filter((p) => p && p.browse_id && !['LM', 'SE', 'VLLM', 'VLSE'].includes(p.browse_id))
+    : []
+  const PICK = 15
+  const many = !all && recent.value.length > PICK
+  const mine = many ? recent.value.slice(0, PICK) : recent.value
   return [
     { label: t('playlists.new'), icon: 'ph:plus', action: () => createPlaylist(rows) },
-    recent.value.length && { divider: true },
-    ...recent.value.map((p) => ({
+    mine.length && { divider: true },
+    ...mine.map((p) => ({
       label: p.name,
       icon: 'ph:playlist',
       action: () => addRows(p.id, rows),
+    })),
+    many && {
+      label: t('playlists.morePlaylists', { count: recent.value.length - PICK }),
+      icon: 'ph:dots-three',
+      action: () => openMenuAt(lastMenuPoint(), pickerItems(rows, true)),
+    },
+    yt.length && { header: t('account.ytPlaylists') },
+    ...yt.map((p) => ({
+      label: p.name,
+      icon: 'ph:youtube-logo',
+      action: () => addRowsToYouTube(p, rows),
     })),
   ]
 }

@@ -16,6 +16,20 @@ const liked = shallowRef([]) // big list: no deep reactivity needed
 const likedIds = ref(new Set())
 const likedLoaded = ref(false)
 const playlists = shallowRef([]) // the account's own YouTube Music playlists
+const following = shallowRef([]) // artists the account follows
+const followingIds = ref(new Set())
+const history = shallowRef([]) // what it played lately on YouTube Music
+// Whether songs played here go into the account's YouTube Music history,
+// which is what its recommendations (Home, radio) are made from. On unless
+// turned off, as it is in YouTube Music's own player.
+const HISTORY_KEY = 'dn.ytHistory'
+const sendHistory = ref((() => {
+  try {
+    return localStorage.getItem(HISTORY_KEY) !== '0'
+  } catch {
+    return true
+  }
+})())
 
 async function refresh() {
   try {
@@ -29,11 +43,15 @@ async function refresh() {
   if (signedIn.value) {
     loadLiked()
     loadPlaylists()
+    loadFollowing()
   } else {
     liked.value = []
     likedIds.value = new Set()
     likedLoaded.value = false
     playlists.value = []
+    following.value = []
+    followingIds.value = new Set()
+    history.value = []
   }
   return signedIn.value
 }
@@ -58,6 +76,100 @@ async function loadPlaylists() {
   } catch {
     playlists.value = []
   }
+}
+
+async function loadFollowing() {
+  if (!signedIn.value) return
+  try {
+    const res = await API.getFollowing()
+    following.value = (res.data && res.data.artists) || []
+    followingIds.value = new Set(following.value.map((a) => a.browse_id))
+  } catch {
+    // following is an extra
+  }
+}
+
+function isFollowing(channelId) {
+  return !!channelId && followingIds.value.has(channelId)
+}
+
+/** Follow or stop following an artist on YouTube Music (optimistic). */
+async function toggleFollow(artist) {
+  const id = artist && (artist.channel_id || artist.browse_id)
+  if (!id) return false
+  if (!signedIn.value) {
+    toast(t('account.signInToFollow'), {
+      icon: 'ph:user-plus',
+      action: { label: t('account.signIn'), run: () => signIn() },
+    })
+    return false
+  }
+  const next = !isFollowing(id)
+  const ids = new Set(followingIds.value)
+  if (next) ids.add(id)
+  else ids.delete(id)
+  followingIds.value = ids
+  try {
+    await API.setFollowing(id, next)
+    if (next) {
+      following.value = [
+        { type: 'artist', browse_id: id, name: artist.name || '', cover_url: artist.cover_url || '' },
+        ...following.value.filter((a) => a.browse_id !== id),
+      ]
+    } else {
+      following.value = following.value.filter((a) => a.browse_id !== id)
+    }
+    return true
+  } catch {
+    const back = new Set(followingIds.value)
+    if (next) back.delete(id)
+    else back.add(id)
+    followingIds.value = back
+    toast(t('account.followFailed'), { tone: 'error' })
+    return false
+  }
+}
+
+async function loadHistory() {
+  if (!signedIn.value) return
+  try {
+    const res = await API.getHistory()
+    history.value = (res.data && res.data.songs) || []
+  } catch {
+    // shown when there is one
+  }
+}
+
+function setSendHistory(on) {
+  sendHistory.value = !!on
+  try {
+    localStorage.setItem(HISTORY_KEY, on ? '1' : '0')
+  } catch {
+    // for this session only
+  }
+}
+
+// Each song once in a while, not on every replay of it.
+const reported = new Map()
+/** A song was listened to (see player.js): into the account's history. */
+function notePlayedOnAccount(track) {
+  if (!signedIn.value || !sendHistory.value || !track) return
+  const id = [track.video_id, track.song_id].find((v) => typeof v === 'string' && /^[A-Za-z0-9_-]{11}$/.test(v))
+  if (!id) return
+  const now = Date.now()
+  if (now - (reported.get(id) || 0) < 10 * 60 * 1000) return
+  reported.set(id, now)
+  API.addHistory(id).catch(() => {})
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('dannify:played', (e) => notePlayedOnAccount(e.detail))
+}
+
+/** Add songs to one of the account's YouTube Music playlists. */
+async function addToYouTubePlaylist(playlist, videoIds) {
+  const res = await API.addToYouTubePlaylist(playlist.browse_id, videoIds)
+  return res.data
 }
 
 /** Open the Google sign-in window (desktop only). */
@@ -160,10 +272,21 @@ export function useAccount() {
     likedIds,
     likedLoaded,
     playlists,
+    following,
+    followingIds,
+    history,
+    sendHistory,
     displayName: computed(() => profile.value.name || ''),
     refresh,
     loadLiked,
     loadPlaylists,
+    loadFollowing,
+    isFollowing,
+    toggleFollow,
+    loadHistory,
+    setSendHistory,
+    notePlayedOnAccount,
+    addToYouTubePlaylist,
     signIn,
     signOut,
     isLiked,

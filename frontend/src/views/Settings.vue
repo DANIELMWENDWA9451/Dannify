@@ -82,6 +82,19 @@
             </button>
           </div>
         </div>
+        <label v-if="account.signedIn.value" class="row">
+          <Icon icon="ph:clock-counter-clockwise" class="row-icon" />
+          <div class="row-text">
+            <p class="row-label">{{ t('account.sendHistory') }}</p>
+            <p class="row-hint">{{ t('account.sendHistoryHint') }}</p>
+          </div>
+          <input
+            type="checkbox"
+            class="switch"
+            :checked="account.sendHistory.value"
+            @change="account.setSendHistory($event.target.checked)"
+          />
+        </label>
       </section>
 
       <!-- Appearance -->
@@ -388,7 +401,12 @@
             />
           </label>
           <div v-if="player.eq.value.on" class="row eq">
-            <EqCurve class="eq-curve" :on="player.eq.value.on" :gains="player.eq.value.gains" />
+            <EqGraph
+              class="eq-curve"
+              :on="player.eq.value.on"
+              :gains="player.eq.value.gains"
+              @band="(i, db) => player.setEqBand(i, db)"
+            />
             <div class="eq-presets" role="radiogroup" :aria-label="t('settings.equalizer')">
               <button
                 v-for="name in eqPresetNames"
@@ -770,7 +788,7 @@ import { useUi } from '/src/model/ui'
 import { usePlayer } from '/src/model/player'
 import { EQ_BANDS, EQ_PRESETS } from '/src/model/audioEngine'
 import RangeSlider from '/src/components/ui/RangeSlider.vue'
-import EqCurve from '/src/components/ui/EqCurve.vue'
+import EqGraph from '/src/components/ui/EqGraph.vue'
 import { useAccount } from '/src/model/account'
 import { useUpdates } from '/src/model/updates'
 import { useConnectivity } from '/src/model/connectivity'

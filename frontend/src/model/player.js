@@ -152,12 +152,13 @@ function readEq() {
   try {
     const v = JSON.parse(readStored(EQ_KEY) || 'null')
     if (v && Array.isArray(v.gains) && v.gains.length === EQ_BANDS.length) {
-      return { on: !!v.on, preset: String(v.preset || 'custom'), gains: v.gains.map((g) => Number(g) || 0) }
+      const preamp = typeof v.preamp === 'number' && Number.isFinite(v.preamp) ? v.preamp : 'auto'
+      return { on: !!v.on, preset: String(v.preset || 'custom'), gains: v.gains.map((g) => Number(g) || 0), preamp }
     }
   } catch {
     // a damaged setting: start flat
   }
-  return { on: false, preset: 'flat', gains: [...EQ_PRESETS.flat] }
+  return { on: false, preset: 'flat', gains: [...EQ_PRESETS.flat], preamp: 'auto' }
 }
 function storeSetting(key, value) {
   try {
@@ -167,7 +168,7 @@ function storeSetting(key, value) {
   }
 }
 function applyEq() {
-  if (engine) engine.setEq(eq.value.on, eq.value.gains)
+  if (engine) engine.setEq(eq.value.on, eq.value.gains, eq.value.preamp === 'auto' ? null : eq.value.preamp)
 }
 function setEq(next) {
   eq.value = next
@@ -178,14 +179,83 @@ function setEqEnabled(on) {
   setEq({ ...eq.value, on: !!on })
 }
 function setEqPreset(name) {
-  if (!EQ_PRESETS[name]) return
-  setEq({ on: true, preset: name, gains: [...EQ_PRESETS[name]] })
+  const own = String(name).startsWith('user:') ? eqUserPresets.value.find((p) => 'user:' + p.name === name) : null
+  const gains = own ? own.gains : EQ_PRESETS[name]
+  if (!gains) return
+  setEq({ ...eq.value, on: true, preset: name, gains: [...gains] })
 }
 function setEqBand(index, db) {
   if (index < 0 || index >= EQ_BANDS.length) return
   const gains = [...eq.value.gains]
   gains[index] = Math.max(-12, Math.min(12, Math.round(Number(db) * 2) / 2 || 0))
-  setEq({ on: true, preset: 'custom', gains })
+  setEq({ ...eq.value, on: true, preset: 'custom', gains })
+}
+/** 'auto' (half the biggest boost taken back) or dB, -12 to +12. */
+function setEqPreamp(v) {
+  const preamp = v === 'auto' ? 'auto' : Math.max(-12, Math.min(12, Math.round(Number(v) * 2) / 2 || 0))
+  setEq({ ...eq.value, preamp })
+}
+
+// Equalizer settings of the listener's own, by name.
+const EQ_USER_KEY = 'dannify-eq-user'
+const EQ_USER_MAX = 12
+const eqUserPresets = ref((() => {
+  try {
+    const v = JSON.parse(readStored(EQ_USER_KEY) || '[]')
+    return Array.isArray(v)
+      ? v.filter((p) => p && p.name && Array.isArray(p.gains) && p.gains.length === EQ_BANDS.length).slice(0, EQ_USER_MAX)
+      : []
+  } catch {
+    return []
+  }
+})())
+function saveEqPreset(name) {
+  const clean = String(name || '').trim().slice(0, 40)
+  if (!clean) return false
+  const list = eqUserPresets.value.filter((p) => p.name !== clean)
+  list.unshift({ name: clean, gains: [...eq.value.gains] })
+  eqUserPresets.value = list.slice(0, EQ_USER_MAX)
+  storeSetting(EQ_USER_KEY, JSON.stringify(eqUserPresets.value))
+  setEq({ ...eq.value, preset: 'user:' + clean })
+  return true
+}
+function deleteEqPreset(name) {
+  eqUserPresets.value = eqUserPresets.value.filter((p) => p.name !== name)
+  storeSetting(EQ_USER_KEY, JSON.stringify(eqUserPresets.value))
+  if (eq.value.preset === 'user:' + name) setEq({ ...eq.value, preset: 'custom' })
+}
+
+// Listening speed, kept between runs, and whether the pitch stays put.
+const SPEED_KEY = 'dannify-speed'
+const PITCH_KEY = 'dannify-keep-pitch'
+const speed = ref(Math.max(0.5, Math.min(2, Number(readStored(SPEED_KEY)) || 1)))
+const keepPitch = ref(readStored(PITCH_KEY) !== '0')
+function setSpeed(v) {
+  speed.value = Math.max(0.5, Math.min(2, Math.round((Number(v) || 1) * 20) / 20))
+  storeSetting(SPEED_KEY, String(speed.value))
+  setPlaybackRate(speed.value)
+}
+function setKeepPitch(on) {
+  keepPitch.value = !!on
+  storeSetting(PITCH_KEY, on ? '1' : '0')
+  if (audio) {
+    try {
+      audio.preservesPitch = keepPitch.value
+    } catch {
+      // not supported here
+    }
+  }
+}
+/** Back to the listener's own speed (after the lyrics editor's slow motion). */
+function restoreSpeed() {
+  setPlaybackRate(speed.value)
+}
+/** The output's spectrum into `out` (dB per bin); false without the engine. */
+function spectrum(out) {
+  return engine && typeof engine.spectrum === 'function' ? engine.spectrum(out) : false
+}
+function spectrumInfo() {
+  return engine ? { bins: engine.bins || 0, sampleRate: engine.sampleRate || 48000 } : { bins: 0, sampleRate: 48000 }
 }
 function setCrossfade(seconds) {
   crossfade.value = Math.max(0, Math.min(12, Math.round(Number(seconds) || 0)))
@@ -258,7 +328,7 @@ function remembered(key, allowed, fallback) {
 
 const repeatMode = ref(remembered(REPEAT_KEY, ['off', 'all', 'one'], 'off'))
 const shuffle = ref(remembered(SHUFFLE_KEY, ['0', '1'], '0') === '1')
-const playbackRate = ref(1.0)
+const playbackRate = ref(Math.max(0.5, Math.min(2, Number(readStored('dannify-speed')) || 1)))
 // Autoplay: when the queue runs dry, keep going with YouTube Music's endless
 // mix for the last track: the behaviour every streaming app has.
 const AUTOPLAY_KEY = 'dannify-autoplay-radio'
@@ -1349,8 +1419,10 @@ function addToShuffleOrder(at, count, { next = false, mix = false } = {}) {
   for (let k = 0; k < count; k++) added.push(at + k)
   if (mix) shuffled(added)
   const order = shuffleOrder.value.map((i) => (i >= at ? i + count : i))
-  order.splice(next ? shufflePosition() + 1 : order.length, 0, ...added)
-  shuffleOrder.value = order
+  const where = next ? shufflePosition() + 1 : order.length
+  // Not splice(where, 0, ...added): that passes every index as an argument
+  // and runs out of stack when a whole big library is queued.
+  shuffleOrder.value = [...order.slice(0, where), ...added, ...order.slice(where)]
   return added
 }
 
@@ -1431,12 +1503,11 @@ function enqueue(items, { next: asNext = false } = {}) {
     .filter(Boolean)
     .map(toTrack)
   if (!tracks.length) return
-  const list = [...playlist.value]
+  const before = playlist.value
   const afterCurrent = asNext && currentIndex.value >= 0
-  const at = afterCurrent ? currentIndex.value + 1 : list.length
+  const at = afterCurrent ? currentIndex.value + 1 : before.length
   if (shuffle.value) addToShuffleOrder(at, tracks.length, { next: afterCurrent })
-  list.splice(at, 0, ...tracks)
-  playlist.value = list
+  playlist.value = [...before.slice(0, at), ...tracks, ...before.slice(at)]
   if (currentIndex.value < 0) playAt(at)
 }
 
@@ -1607,6 +1678,7 @@ function playAt(index, { autoplay = true, fade = null } = {}) {
   // Re-apply playback rate: browsers reset it to 1.0 on src change.
   try {
     a.playbackRate = playbackRate.value
+    a.preservesPitch = keepPitch.value
   } catch {
     // ignore
   }
@@ -1645,6 +1717,10 @@ function playAt(index, { autoplay = true, fade = null } = {}) {
   syncMediaSession()
   rememberPlayed(track)
   notePlayed()
+  // For whoever keeps a history of listens (the YouTube Music account).
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('dannify:played', { detail: track }))
+  }
   saveSession()
   // First-play affordance: surface the lyrics panel the very first time
   // the user plays something this session, so they see the headline
@@ -2274,6 +2350,17 @@ export function usePlayer() {
     autoplayRadio,
     setAutoplayRadio,
     normalizeLoudness,
+    eqUserPresets,
+    saveEqPreset,
+    deleteEqPreset,
+    setEqPreamp,
+    speed,
+    setSpeed,
+    keepPitch,
+    setKeepPitch,
+    restoreSpeed,
+    spectrum,
+    spectrumInfo,
     volumeLevel,
     setVolumeLevel,
     balance,

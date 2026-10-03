@@ -3740,9 +3740,12 @@ def main() -> None:
         # One page, one renderer. Without this WebView2 keeps spare processes
         # around that cost 40-60 MB each and buy us nothing.
         '--renderer-process-limit=1',
-        # The whole UI holds a few thousand track objects at most; letting V8
-        # grow to the default (a share of system RAM) just delays collection.
-        '--js-flags=--max-old-space-size=256',
+        # A ceiling for the page's memory, not a target: V8 collects long
+        # before it. It was 256 MB, and a library of a couple of hundred
+        # thousand artists went past that while sorting; the page then died
+        # and came back blank. The default is a share of the machine's RAM,
+        # which lets a runaway page take far more than a music player should.
+        '--js-flags=--max-old-space-size=1024',
         # A music player plays in the background. Chromium slows the timers
         # of a page it thinks nobody is looking at, and the change to the
         # next song (crossfade, gapless) is timed by one: minimized or in the
@@ -3935,7 +3938,10 @@ def main() -> None:
     os._exit(0)
 
 
-if __name__ == '__main__':
+def entry() -> None:
+    """Start the app: what running this file does, and what a shipped build's
+    boot.py calls once the app's code is where Python finds it."""
+
     # PoW solver sub-mode: if this exe was respawned by the lyrics-publish
     # flow to chase a nonce, just run the search loop and exit (no
     # FastAPI, no window, no log file). Detected via two env vars our own
@@ -3980,3 +3986,7 @@ if __name__ == '__main__':
         # A crash reporting itself as success made the helper stop retrying
         # and declare the update finished, with nothing on screen.
         sys.exit(3)
+
+
+if __name__ == '__main__':
+    entry()
