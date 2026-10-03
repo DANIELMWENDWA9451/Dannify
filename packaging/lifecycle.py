@@ -460,8 +460,9 @@ def stage_update():
 
     def tweak(src):
         (src / 'runtime' / 'marker.txt').write_text(new)
-        support = src / 'config' / 'support.json'
-        support.write_text(support.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+        # One file that was already there changes too, not only a new one.
+        changed = src / 'runtime' / 'webview' / 'js' / 'state.js'
+        changed.write_text(changed.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
 
     build_release(new, tweak)
     port = serve(new)
