@@ -81,6 +81,7 @@ PROBE = textwrap.dedent('''
 def test_the_gate(tmp_path):
     env = dict(os.environ)
     env['DANNIFY_DATA_DIR'] = str(tmp_path / 'data')
+    env['WEB_GUI_LOCATION'] = str(BACKEND.parent / 'frontend')
     env.pop('DOWNLOAD_DIR', None)
     env.pop('HOST', None)
     run = subprocess.run(
