@@ -120,6 +120,9 @@ async def receive(
     rid = id.strip().upper()
     if not _ID.match(rid):
         raise HTTPException(status_code=400, detail='bad id')
+    rid = Path(rid).name
+    if not _ID.match(rid):
+        raise HTTPException(status_code=400, detail='bad id')
     text = description.strip()
     if not 10 <= len(text) <= MAX_TEXT:
         raise HTTPException(status_code=400, detail='description must be 10 to 5000 characters')
@@ -132,8 +135,10 @@ async def receive(
         'received': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()) + ' UTC',
         'diagnostics': False,
     }
-    day = DATA / time.strftime('%Y-%m-%d', time.gmtime())
-    folder = day / rid
+    day = (DATA / time.strftime('%Y-%m-%d', time.gmtime())).resolve()
+    folder = (day / rid).resolve()
+    if folder.parent != day:
+        raise HTTPException(status_code=400, detail='bad id')
     try:
         folder.mkdir(parents=True)
     except FileExistsError:
