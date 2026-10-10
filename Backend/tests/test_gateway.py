@@ -23,11 +23,11 @@ PROBE = textwrap.dedent('''
 
     app = main.build_app()
 
-    async def call(path, host='127.0.0.1:8765', headers=(), method='GET'):
+    async def call(path, host='127.0.0.1:8765', headers=(), method='GET', query='', scheme='http'):
         scope = {
             'type': 'http', 'http_version': '1.1', 'method': method,
-            'scheme': 'http', 'path': path, 'raw_path': path.encode(),
-            'query_string': b'', 'root_path': '',
+            'scheme': scheme, 'path': path, 'raw_path': path.encode(),
+            'query_string': query.encode(), 'root_path': '',
             'headers': [(b'host', host.encode())] + [
                 (k.encode(), v.encode()) for k, v in headers
             ],
@@ -64,6 +64,9 @@ PROBE = textwrap.dedent('''
         out['key_wrong'] = (await call('/api/version', headers=[('x-dannify-key', 'k' * 42 + 'x')]))['status']
         out['key_right'] = (await call('/api/version', headers=[('x-dannify-key', 'k' * 43)]))['status']
         out['cookie_right'] = (await call('/api/version', headers=[('cookie', 'dnf_session=' + 'k' * 43)]))['status']
+        out['key_in_api_query'] = (await call('/api/version', query='k=' + 'k' * 43))['status']
+        r = await call('/', query='k=' + 'k' * 43, scheme='https')
+        out['cookie_attrs'] = r['headers'].get('set-cookie', '')
         r = await call('/api/version', headers=[('x-dannify-key', 'k' * 43), ('origin', 'https://evil.example')])
         out['cors_header'] = r['headers'].get('access-control-allow-origin', '')
         # An API path that matches nothing is a 404, not the interface.
@@ -97,6 +100,11 @@ def test_the_gate(tmp_path):
     assert out['key_wrong'] == 404
     assert out['key_right'] == 200
     assert out['cookie_right'] == 200
+    assert out['key_in_api_query'] == 404
+    assert 'HttpOnly' in out['cookie_attrs']
+    assert 'SameSite=Strict' in out['cookie_attrs']
+    assert 'Max-Age=43200' in out['cookie_attrs']
+    assert 'Secure' in out['cookie_attrs']
     # No origin is invited to read responses with the user's cookie.
     assert out['cors_header'] == ''
     assert out['unknown_api'][0] == 404

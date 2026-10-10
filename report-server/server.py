@@ -134,10 +134,11 @@ async def receive(
     }
     day = DATA / time.strftime('%Y-%m-%d', time.gmtime())
     folder = day / rid
-    if folder.exists():
+    try:
+        folder.mkdir(parents=True)
+    except FileExistsError:
         # The app retries a report it could not confirm; the first one counts.
         return {'id': rid, 'status': 'already received'}
-    folder.mkdir(parents=True)
     if diagnostics is not None:
         data = await diagnostics.read(MAX_ZIP + 1)
         if len(data) > MAX_ZIP:
