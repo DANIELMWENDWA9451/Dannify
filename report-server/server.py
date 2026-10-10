@@ -73,13 +73,19 @@ def _require(token: Optional[str]) -> None:
 
 
 def _folder(rid: str) -> Path:
-    if not _ID.match(rid):
-        raise HTTPException(status_code=404, detail='no such report')
+    name = _rid_dirname(rid)
     for day in sorted(DATA.glob('*'), reverse=True):
-        candidate = day / rid
+        candidate = day / name
         if candidate.is_dir():
             return candidate
     raise HTTPException(status_code=404, detail='no such report')
+
+
+def _rid_dirname(rid: str) -> str:
+    if not _ID.match(rid):
+        raise HTTPException(status_code=404, detail='no such report')
+    # Canonical numeric form for storage paths: no path separators, no dots.
+    return f'{int(rid, 36):025d}'
 
 
 def _notify(meta: dict[str, Any]) -> None:
@@ -120,9 +126,6 @@ async def receive(
     rid = id.strip().upper()
     if not _ID.match(rid):
         raise HTTPException(status_code=400, detail='bad id')
-    rid = Path(rid).name
-    if not _ID.match(rid):
-        raise HTTPException(status_code=400, detail='bad id')
     text = description.strip()
     if not 10 <= len(text) <= MAX_TEXT:
         raise HTTPException(status_code=400, detail='description must be 10 to 5000 characters')
@@ -135,10 +138,8 @@ async def receive(
         'received': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()) + ' UTC',
         'diagnostics': False,
     }
-    day = (DATA / time.strftime('%Y-%m-%d', time.gmtime())).resolve()
-    folder = (day / rid).resolve()
-    if folder.parent != day:
-        raise HTTPException(status_code=400, detail='bad id')
+    day = DATA / time.strftime('%Y-%m-%d', time.gmtime())
+    folder = day / _rid_dirname(rid)
     try:
         folder.mkdir(parents=True)
     except FileExistsError:

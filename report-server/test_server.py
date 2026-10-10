@@ -65,9 +65,10 @@ def test_duplicate_report_race_returns_already_received(client, monkeypatch):
 
     real_mkdir = Path.mkdir
     today = time.strftime('%Y-%m-%d', time.gmtime())
+    race_name = server._rid_dirname('RACE1234')
 
     def race(self, *args, **kwargs):  # noqa: ANN001
-        if self.name == 'RACE1234' and self.parent.name == today:
+        if self.name == race_name and self.parent.name == today:
             raise FileExistsError
         return real_mkdir(self, *args, **kwargs)
 
