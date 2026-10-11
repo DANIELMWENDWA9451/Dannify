@@ -1,15 +1,20 @@
 # Publish a release on Dannify's repository, beside every release before it.
 # Installed copies update from its latest release.
 #
-#   pwsh packaging\publish.ps1 -Notes "what changed"
-#   pwsh packaging\publish.ps1 -Notes (Get-Content notes.md -Raw)
+#   pwsh packaging/publish.ps1 -Notes "what changed"
+#   pwsh packaging/publish.ps1 -Notes (Get-Content notes.md -Raw)
 #
-# One release carries every platform: the Windows setup and package built
-# here by build.ps1, and the Linux .deb and macOS apps the release workflow
-# builds on GitHub's machines when the tag is pushed. Those come down
-# unsigned: they are signed here, with the offline release key that never
-# goes near GitHub, and every file is checked against the key installed
-# copies trust before anything is uploaded.
+# Runs wherever PowerShell does: releases are cut from Linux now.
+#
+# One release carries every platform: the Windows setup and package, the
+# Linux .deb and the macOS apps, all built by the release workflow on
+# GitHub's machines when the tag is pushed. They come down unsigned: they are
+# signed here, with the offline release key that never goes near GitHub, and
+# every file is checked against the key installed copies trust before
+# anything is uploaded.
+#
+# -WindowsFrom local takes the Windows files from packaging\out instead, as
+# build.ps1 leaves them on a Windows desk, already signed.
 #
 # Up to 4.6.1, builds went to a separate repository, dannify-releases, that
 # carried the current build and nothing else, while the source was private.
@@ -24,52 +29,81 @@ param(
     # The platforms this release must carry. Leaving one out is a decision,
     # never something that happens because its build failed.
     [string[]]$Platforms = @('windows', 'linux', 'macos'),
+    # Where the Windows files come from: the release workflow, or a build.ps1
+    # run on this machine.
+    [ValidateSet('ci', 'local')][string]$WindowsFrom = 'ci',
     # How long to wait for the release workflow to finish building.
-    [int]$WaitMinutes = 90
+    [int]$WaitMinutes = 90,
+    # Download, sign and check everything, then stop: nothing is published.
+    [switch]$DryRun,
+    # With -DryRun: take the builds from this workflow run rather than the
+    # tag's own, to try the whole thing out on a branch.
+    [string]$Run = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $PSScriptRoot 'out'
-$python = Join-Path $root 'Backend\venv\Scripts\python.exe'
+# The Python the signing runs on: the one named, or this checkout's own
+# environment (Scripts on Windows, bin everywhere else).
+$python = $env:DANNIFY_PYTHON
+foreach ($candidate in 'Backend/venv/Scripts/python.exe', 'Backend/venv/bin/python') {
+    if (-not $python -and (Test-Path (Join-Path $root $candidate))) { $python = Join-Path $root $candidate }
+}
+if (-not $python) { throw 'no Python to sign with: make Backend/venv (see the README) or set DANNIFY_PYTHON' }
 $releaseKey = Join-Path $PSScriptRoot 'release_key.py'
 $gh = 'C:\Program Files\GitHub CLI\gh.exe'
 if (-not (Test-Path $gh)) { $gh = 'gh' }
 
-$version = (Select-String -Path (Join-Path $root 'Backend\dannify\__init__.py') `
+$version = (Select-String -Path (Join-Path $root 'Backend/dannify/__init__.py') `
     -Pattern "__version__\s*=\s*'([^']+)'").Matches[0].Groups[1].Value
 if (-not $version) { throw 'could not read the version' }
 $tag = "v$version"
 
+# No point waiting on a build for a key that is not there.
+& $python $releaseKey public | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'no release signing key (see packaging/release_key.py)' }
+
+# The installer (new installs, and Dannify 3.x moving to 4.0) and the package
+# installed copies update from. Deliberately not manifest-* or files-*: 3.x
+# would try to patch its old layout with those.
+$windows = @("Dannify-Setup-$version.exe", "package-$version.json", "package-$version.zip")
 $files = @()
+$wanted = @()
 if ($Platforms -contains 'windows') {
-    # The installer (new installs, and Dannify 3.x moving to 4.0) and the
-    # package installed copies update from. Deliberately not manifest-* or
-    # files-*: 3.x would try to patch its old layout with those.
-    $files += @(
-        (Join-Path $out "Dannify-Setup-$version.exe"),
-        (Join-Path $out "Dannify-Setup-$version.exe.sig"),
-        (Join-Path $out "package-$version.json"),
-        (Join-Path $out "package-$version.json.sig"),
-        (Join-Path $out "package-$version.zip")
-    )
-    foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f (run build.ps1)" } }
+    if ($WindowsFrom -eq 'local') {
+        $files += @(
+            (Join-Path $out "Dannify-Setup-$version.exe"),
+            (Join-Path $out "Dannify-Setup-$version.exe.sig"),
+            (Join-Path $out "package-$version.json"),
+            (Join-Path $out "package-$version.json.sig"),
+            (Join-Path $out "package-$version.zip")
+        )
+        foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f (run build.ps1)" } }
+    } else {
+        $wanted += $windows
+    }
 }
 
-# --- Linux and macOS: built by the release workflow for this tag -----------
-$wanted = @()
+# --- Built by the release workflow for this tag -----------------------------
 if ($Platforms -contains 'linux') { $wanted += "linux-dannify_${version}_amd64.deb" }
 if ($Platforms -contains 'macos') {
     foreach ($arch in 'arm64', 'x64') {
         $wanted += "macos-Dannify-$version-$arch.zip", "macos-Dannify-$version-$arch.dmg"
     }
 }
+if ($Run -and -not $DryRun) { throw '-Run is for -DryRun only: a release carries the builds of its own tag' }
 if ($wanted) {
-    $sha = (& git -c safe.directory=* -C $root rev-list -n 1 $tag).Trim()
-    if (-not $sha) { throw "no tag $tag here; push it first" }
-    Write-Host "Waiting for the release workflow on $tag ($($sha.Substring(0, 9)))" -ForegroundColor Cyan
-    $deadline = (Get-Date).AddMinutes($WaitMinutes)
     $run = $null
+    if ($Run) {
+        $run = & $gh run view $Run --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
+        if (-not $run -or $run.status -ne 'completed') { throw "workflow run $Run has not finished" }
+    } else {
+        $sha = (& git -c safe.directory=* -C $root rev-list -n 1 $tag).Trim()
+        if (-not $sha) { throw "no tag $tag here; push it first" }
+        Write-Host "Waiting for the release workflow on $tag ($($sha.Substring(0, 9)))" -ForegroundColor Cyan
+        $deadline = (Get-Date).AddMinutes($WaitMinutes)
+    }
     while (-not $run) {
         $runs = & $gh run list --repo $Repo --workflow release.yml --limit 30 --json databaseId,headSha,status,conclusion,event | ConvertFrom-Json
         $run = $runs | Where-Object { $_.headSha -eq $sha -and $_.event -in @('push', 'workflow_dispatch') } | Select-Object -First 1
@@ -99,9 +133,10 @@ if ($wanted) {
     }
 
     # Signed here, with the offline key. release_key.py refuses to sign with
-    # any key but the one installed copies trust.
-    Write-Host 'Signing the Linux and macOS builds' -ForegroundColor Cyan
-    $toSign = $wanted | ForEach-Object { Join-Path $out $_ }
+    # any key but the one installed copies trust. The package archive has no
+    # signature of its own: the signed list names the hash of every file in it.
+    Write-Host 'Signing the builds' -ForegroundColor Cyan
+    $toSign = $wanted | Where-Object { $_ -notlike 'package-*.zip' } | ForEach-Object { Join-Path $out $_ }
     & $python $releaseKey sign-release @toSign
     if ($LASTEXITCODE -ne 0) { throw 'signing the platform builds failed' }
     $files += $toSign | ForEach-Object { "$_.sig" }
@@ -113,6 +148,12 @@ if ($wanted) {
 $signed = $files | Where-Object { $_ -notlike '*.sig' -and $_ -notlike '*package-*.zip' }
 & $python $releaseKey verify-release @signed
 if ($LASTEXITCODE -ne 0) { throw 'a release file does not verify against PUBLIC_KEY in updates.py' }
+
+if ($DryRun) {
+    Write-Host "Dry run: $($files.Count) files signed and checked, nothing published." -ForegroundColor Green
+    $files | ForEach-Object { '  ' + (Split-Path $_ -Leaf) }
+    return
+}
 
 Write-Host "Publishing $tag on $Repo with $($files.Count) files" -ForegroundColor Cyan
 & $gh release create $tag --repo $Repo --verify-tag --latest --title "Dannify $version" --notes $Notes @files
