@@ -127,6 +127,12 @@ jobs:
       - name: Build Dannify and its installer
         shell: pwsh
         run: ./packaging/build.ps1 -SkipTests -Unsigned
+      # The setup as a person gets it: installed, started, quit and removed,
+      # in a sandbox that touches no real install, registry entry or library.
+      # Nobody has a Windows desk to try a build on before it goes out.
+      - name: Install, start and remove it
+        shell: pwsh
+        run: python packaging/lifecycle.py install launch uninstall
       - uses: actions/upload-artifact@v4
         with:
           name: Dannify-Setup-${{ steps.version.outputs.version }}.exe
