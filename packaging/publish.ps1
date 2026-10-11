@@ -101,10 +101,11 @@ if ($Platforms -contains 'macos') {
 }
 if ($Run -and -not $DryRun) { throw '-Run is for -DryRun only: a release carries the builds of its own tag' }
 if ($wanted) {
+    $requestedRun = $Run
     $run = $null
-    if ($Run) {
-        $run = & $gh run view $Run --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
-        if (-not $run -or $run.status -ne 'completed') { throw "workflow run $Run has not finished" }
+    if ($requestedRun) {
+        $run = & $gh run view $requestedRun --repo $Repo --json databaseId,status,conclusion | ConvertFrom-Json
+        if (-not $run -or $run.status -ne 'completed') { throw "workflow run $requestedRun has not finished" }
     } else {
         $sha = (& git -c safe.directory=* -C $root rev-list -n 1 $tag).Trim()
         if (-not $sha) { throw "no tag $tag here; push it first" }
