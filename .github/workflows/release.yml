@@ -148,7 +148,9 @@ jobs:
               Write-Host "$previous is the latest release: nothing before it to install over"
               exit 0
           }
-          gh release download "v$previous" --repo $env:GITHUB_REPOSITORY --pattern "Dannify-Setup-$previous.exe" --dir packaging/out
+          # Its setup, and its list of files to check the install against.
+          gh release download "v$previous" --repo $env:GITHUB_REPOSITORY --dir packaging/out `
+            --pattern "Dannify-Setup-$previous.exe" --pattern "package-$previous.json"
           if ($LASTEXITCODE -ne 0) { throw "could not fetch the $previous setup" }
           # The test songs are made with a full FFmpeg; the one the app
           # bundles has no tone generator.
