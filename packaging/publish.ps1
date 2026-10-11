@@ -52,6 +52,8 @@ foreach ($candidate in 'Backend/venv/Scripts/python.exe', 'Backend/venv/bin/pyth
 }
 if (-not $python) { throw 'no Python to sign with: make Backend/venv (see the README) or set DANNIFY_PYTHON' }
 $releaseKey = Join-Path $PSScriptRoot 'release_key.py'
+# What release_key.py calls a signature file (signing.SIGNATURE_SUFFIX).
+$sig = '.dsig'
 $gh = 'C:\Program Files\GitHub CLI\gh.exe'
 if (-not (Test-Path $gh)) { $gh = 'gh' }
 
@@ -74,9 +76,9 @@ if ($Platforms -contains 'windows') {
     if ($WindowsFrom -eq 'local') {
         $files += @(
             (Join-Path $out "Dannify-Setup-$version.exe"),
-            (Join-Path $out "Dannify-Setup-$version.exe.sig"),
+            (Join-Path $out "Dannify-Setup-$version.exe$sig"),
             (Join-Path $out "package-$version.json"),
-            (Join-Path $out "package-$version.json.sig"),
+            (Join-Path $out "package-$version.json$sig"),
             (Join-Path $out "package-$version.zip")
         )
         foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f (run build.ps1)" } }
@@ -122,7 +124,10 @@ if ($wanted) {
 
     $ci = Join-Path $out "ci-$version"
     if (Test-Path $ci) { Remove-Item $ci -Recurse -Force }
-    & $gh run download $run.databaseId --repo $Repo --dir $ci
+    # Only what this release carries: the run also keeps screenshots and
+    # parts of its own, and every megabyte comes down this machine's line.
+    $names = $wanted | ForEach-Object { '--name', $_ }
+    & $gh run download $run.databaseId --repo $Repo --dir $ci @names
     if ($LASTEXITCODE -ne 0) { throw 'could not download the workflow builds' }
     foreach ($name in $wanted) {
         $found = Get-ChildItem -Path $ci -Recurse -File -Filter $name | Select-Object -First 1
@@ -139,13 +144,13 @@ if ($wanted) {
     $toSign = $wanted | Where-Object { $_ -notlike 'package-*.zip' } | ForEach-Object { Join-Path $out $_ }
     & $python $releaseKey sign-release @toSign
     if ($LASTEXITCODE -ne 0) { throw 'signing the platform builds failed' }
-    $files += $toSign | ForEach-Object { "$_.sig" }
+    $files += $toSign | ForEach-Object { "$_$sig" }
 }
 
 # --- Every file checked against the key the app carries --------------------
 # Every installed copy from 4.7.0 on refuses an update that does not verify,
 # so a release that would be refused everywhere is never put up at all.
-$signed = $files | Where-Object { $_ -notlike '*.sig' -and $_ -notlike '*package-*.zip' }
+$signed = $files | Where-Object { $_ -notlike "*$sig" -and $_ -notlike '*package-*.zip' }
 & $python $releaseKey verify-release @signed
 if ($LASTEXITCODE -ne 0) { throw 'a release file does not verify against PUBLIC_KEY in updates.py' }
 

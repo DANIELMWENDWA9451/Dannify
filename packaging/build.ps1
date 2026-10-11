@@ -12,7 +12,7 @@
 #   Backend\dist\Dannify\                    the app folder (installed as <root>\app)
 #   packaging\out\Dannify-Setup-<v>.exe      the installer: our own, see installer\
 #   packaging\out\package-<v>.json/.zip      what installed copies update from
-#   packaging\out\*.sig                      release signatures (release_key.py)
+#   packaging\out\*.dsig                     release signatures (release_key.py)
 
 [CmdletBinding()]
 param(
