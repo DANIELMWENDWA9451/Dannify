@@ -28,7 +28,7 @@ param(
     [string]$Repo = 'DANIELMWENDWA9451/Dannify',
     # The platforms this release must carry. Leaving one out is a decision,
     # never something that happens because its build failed.
-    [string[]]$Platforms = @('windows', 'linux', 'macos'),
+    [ValidateSet('windows', 'linux', 'macos')][string[]]$Platforms = @('windows', 'linux', 'macos'),
     # Where the Windows files come from: the release workflow, or a build.ps1
     # run on this machine.
     [ValidateSet('ci', 'local')][string]$WindowsFrom = 'ci',
@@ -44,12 +44,17 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $PSScriptRoot 'out'
+# Where the workflow's builds are put and signed. A dry run keeps to a folder
+# of its own: on a branch it carries the version of a release already made,
+# and must not write over that release's files.
+$work = if ($DryRun) { Join-Path $out 'dry-run' } else { $out }
+New-Item -ItemType Directory -Force $work | Out-Null
 # The Python the signing runs on: the one named, or this checkout's own
-# environment (Scripts on Windows, bin everywhere else).
+# environment. Its place for this system only (Scripts on Windows, bin
+# everywhere else): a checkout that has moved between the two can hold both.
 $python = $env:DANNIFY_PYTHON
-foreach ($candidate in 'Backend/venv/Scripts/python.exe', 'Backend/venv/bin/python') {
-    if (-not $python -and (Test-Path (Join-Path $root $candidate))) { $python = Join-Path $root $candidate }
-}
+$own = Join-Path $root $(if ($env:OS -eq 'Windows_NT') { 'Backend/venv/Scripts/python.exe' } else { 'Backend/venv/bin/python' })
+if (-not $python -and (Test-Path $own)) { $python = $own }
 if (-not $python) { throw 'no Python to sign with: make Backend/venv (see the README) or set DANNIFY_PYTHON' }
 $releaseKey = Join-Path $PSScriptRoot 'release_key.py'
 # What release_key.py calls a signature file (signing.SIGNATURE_SUFFIX).
@@ -122,7 +127,7 @@ if ($wanted) {
     }
     if ($run.conclusion -ne 'success') { throw "the release workflow for $tag ended: $($run.conclusion)" }
 
-    $ci = Join-Path $out "ci-$version"
+    $ci = Join-Path $work "ci-$version"
     if (Test-Path $ci) { Remove-Item $ci -Recurse -Force }
     # Only what this release carries: the run also keeps screenshots and
     # parts of its own, and every megabyte comes down this machine's line.
@@ -132,7 +137,7 @@ if ($wanted) {
     foreach ($name in $wanted) {
         $found = Get-ChildItem -Path $ci -Recurse -File -Filter $name | Select-Object -First 1
         if (-not $found) { throw "the workflow did not build $name" }
-        $dest = Join-Path $out $name
+        $dest = Join-Path $work $name
         Copy-Item $found.FullName $dest -Force
         $files += $dest
     }
@@ -141,7 +146,7 @@ if ($wanted) {
     # any key but the one installed copies trust. The package archive has no
     # signature of its own: the signed list names the hash of every file in it.
     Write-Host 'Signing the builds' -ForegroundColor Cyan
-    $toSign = $wanted | Where-Object { $_ -notlike 'package-*.zip' } | ForEach-Object { Join-Path $out $_ }
+    $toSign = $wanted | Where-Object { $_ -notlike 'package-*.zip' } | ForEach-Object { Join-Path $work $_ }
     & $python $releaseKey sign-release @toSign
     if ($LASTEXITCODE -ne 0) { throw 'signing the platform builds failed' }
     $files += $toSign | ForEach-Object { "$_$sig" }
